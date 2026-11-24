@@ -25,7 +25,7 @@ export function inlineEdit() {
   if (session) { session.input?.focus(); return; }
   const tgt = editTarget();
   const p = S.providers.find((x) => x.id === tgt.provider);
-  if (!p || !usable(p)) { toast(`Add an API key for ${providerName(tgt.provider)} in Settings → Models`, 'error'); exec('settings.open', 'models'); return; }
+  if (!p || !usable(p)) { toast(`Set up ${providerName(tgt.provider)} in Settings → Models (API key or Claude Code login)`, 'error'); exec('settings.open', 'models'); return; }
 
   const model = ed.getModel();
   let sel = ed.getSelection();

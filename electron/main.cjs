@@ -112,7 +112,7 @@ function createPty({ cols = 100, rows = 30, cwd, command } = {}) {
 function killPty(id) { try { ptys.get(id)?.kill(); } catch { /* gone */ } ptys.delete(id); }
 
 // ---------------- AI + Claude Code bridge ----------------
-const ai = createAI({ dir: DATA, getConfig: () => config });
+const ai = createAI({ dir: DATA, getConfig: () => config, claude: { bin: () => resolveClaude(), env: () => ({ PATH: loginPath }) } });
 const ideCalls = new Map();
 let ideSeq = 0;
 const ide = createIdeBridge({
@@ -269,7 +269,7 @@ function registerIpc() {
   ipcMain.on('pty:resize', (_e, id, c, r) => { try { ptys.get(id)?.resize(Math.max(2, c), Math.max(2, r)); } catch { /* exited */ } });
   handle('pty:kill', (id) => killPty(id));
 
-  handle('ai:providers', () => ai.list());
+  handle('ai:providers', (force) => ai.list(force));
   handle('ai:setKey', (id, key) => ai.setKey(id, key));
   handle('ai:setProvider', (id, o) => { config.providers[id] = { ...(config.providers[id] || {}), ...o }; saveConfig(); });
   handle('ai:models', async (id) => { const list = await ai.models(id); config.providers[id] = { ...(config.providers[id] || {}), models: list }; saveConfig(); return list; });

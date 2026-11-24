@@ -16,12 +16,12 @@ export function stream({ provider, model, system, messages, maxTokens, effort },
   return { id, promise, abort: () => window.ks.ai.abort(id) };
 }
 
-export async function loadProviders() {
-  S.providers = await window.ks.ai.providers();
+export async function loadProviders(force) {
+  S.providers = await window.ks.ai.providers(!!force);
   emit('providers');
   return S.providers;
 }
-export const usable = (p) => p.hasKey || p.noKey || (p.optionalKey && p.baseURL);
+export const usable = (p) => (p.auth === 'claude' ? !!p.claudeLogin?.loggedIn : p.hasKey || p.noKey || (p.optionalKey && p.baseURL));
 export const providerName = (id) => S.providers.find((p) => p.id === id)?.name || id;
 
 export const chatTarget = () => ({ provider: set('chatProvider'), model: set('chatModel') });

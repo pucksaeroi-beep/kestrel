@@ -124,7 +124,7 @@ async function send(textArg) {
   if (!text || running) return;
   const { provider, model } = chatTarget();
   const p = S.providers.find((x) => x.id === provider);
-  if (!p || !usable(p)) { toast(h('div', {}, `Add an API key for ${providerName(provider)} first. `, h('a', { href: '#', onclick: (e) => { e.preventDefault(); exec('settings.open', 'models'); } }, 'Open Settings')), 'error'); return; }
+  if (!p || !usable(p)) { toast(h('div', {}, `Set up ${providerName(provider)} first (API key or Claude Code login). `, h('a', { href: '#', onclick: (e) => { e.preventDefault(); exec('settings.open', 'models'); } }, 'Open Settings')), 'error'); return; }
   const ctx = currentContext().map(({ auto, ...c }) => c);
   const user = { role: 'user', content: text, context: ctx.map((c) => ({ type: c.type, path: c.path, lines: c.lines })), wire: (await buildContext(ctx)) + text };
   chat.messages.push(user);

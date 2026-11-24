@@ -533,3 +533,10 @@ button.sb-item:hover { background: var(--bg3); color: var(--fg); }
 .md-doc kbd { font: 11px var(--mono); padding: 2px 5px; border: 1px solid var(--line2); border-bottom-width: 2px; border-radius: 5px; background: var(--bg3); }
 .md-doc [align=center] { text-align: center; }
 .md-doc [align=right] { text-align: right; }
+
+/* Anthropic auth: API key or Claude Code login */
+.prov-auth { display: flex; flex-direction: column; gap: 7px; }
+.prov-auth .seg { align-self: flex-start; }
+.seg.sm button { height: 22px; padding: 0 10px; font-size: 11.5px; white-space: nowrap; }
+.prov-auth .hrow { display: flex; align-items: center; gap: 7px; }
+.pdot.on { background: var(--green); }

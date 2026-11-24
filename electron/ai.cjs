@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { safeStorage } = require('electron');
+const { spawn, execFile } = require('child_process');
 const { sseParser, deltaText } = require('./sse.cjs');
 
 const PROVIDERS = {
@@ -24,7 +25,23 @@ const PROVIDERS = {
 const CLAUDE_EFFORT = /^claude-(opus|sonnet|haiku|fable|mythos)-(5|4-[678])/;
 const CLAUDE_FALLBACK = /^claude-(fable-5-[12]|opus-5|opus-5-5|sonnet-5-5|mythos-5-[12])$/;
 
-function createAI({ dir, getConfig }) {
+/**
+ * Flatten a chat history into one prompt for `claude -p`, which takes a single user turn.
+ * Earlier turns become a transcript; the last user message stays last and unwrapped.
+ */
+function cliPrompt(messages) {
+  const last = messages[messages.length - 1];
+  const prev = messages.slice(0, -1);
+  if (!prev.length) return String(last?.content ?? '');
+  const turns = prev.map((m) => `<turn role="${m.role === 'assistant' ? 'assistant' : 'user'}">\n${m.content}\n</turn>`).join('\n');
+  return `<conversation_so_far>\n${turns}\n</conversation_so_far>\n\n${last.content}`;
+}
+
+/**
+ * claude: { bin(): path of the claude CLI, env(): environment for it }. Lets the Anthropic provider
+ * work without an API key by going through the user's own Claude Code login (Pro/Max/Team/Enterprise).
+ */
+function createAI({ dir, getConfig, claude }) {
   const KEYS = path.join(dir, 'keys.json');
   let keys = {};
   try { keys = JSON.parse(fs.readFileSync(KEYS, 'utf8')); } catch { keys = {}; }
@@ -50,16 +67,49 @@ function createAI({ dir, getConfig }) {
     const baseURL = (over.baseURL || p.baseURL || '').replace(/\/+$/, '');
     if (!baseURL) throw new Error(`${p.name}: set a base URL in Settings → Models`);
     const key = getKey(id);
+    if (p.kind === 'anthropic' && claude && authOf(id, key) === 'claude') return { ...p, id, baseURL, key: '', viaCli: true };
     if (!key && !p.noKey && !p.optionalKey) throw new Error(`No API key for ${p.name}. Add one in Settings → Models.`);
     return { ...p, id, baseURL, key };
   }
+  /** Anthropic auth: 'key' or 'claude' (Claude Code login). 'auto' = the key when one is saved, else the login. */
+  function authOf(id, key = getKey(id)) {
+    const a = getConfig().providers?.[id]?.auth || 'auto';
+    return a === 'auto' ? (key ? 'key' : 'claude') : a;
+  }
 
-  function list() {
+  // -------- Claude Code login status (`claude auth status`), cached
+  let login = null, loginAt = 0, loginP = null;
+  function cliEnv() {
+    const env = { ...process.env, ...(claude?.env?.() || {}) };
+    delete env.ELECTRON_RUN_AS_NODE;
+    for (const k of Object.keys(env)) if (/^(CLAUDECODE|CLAUDE_CODE_|CLAUDE_AGENT_SDK)/.test(k)) delete env[k];
+    delete env.ANTHROPIC_API_KEY; delete env.ANTHROPIC_AUTH_TOKEN; // use the login, not a stray key from the shell
+    return env;
+  }
+  function claudeLogin(force) {
+    if (!claude) return Promise.resolve({ loggedIn: false, error: 'unavailable' });
+    if (!force && login && Date.now() - loginAt < 60_000) return Promise.resolve(login);
+    if (loginP) return loginP;
+    loginP = new Promise((resolve) => {
+      execFile(claude.bin(), ['auth', 'status'], { env: cliEnv(), timeout: 15000 }, (err, out) => {
+        let j = null; try { j = JSON.parse(out); } catch { /* not JSON */ }
+        // only what the UI needs; never the account email or org
+        login = j ? { loggedIn: !!j.loggedIn, method: j.authMethod || '', plan: j.subscriptionType || j.planTier || '' }
+          : { loggedIn: false, error: err?.code === 'ENOENT' ? 'Claude Code is not installed' : 'Could not read the Claude Code login' };
+        loginAt = Date.now(); loginP = null; resolve(login);
+      });
+    });
+    return loginP;
+  }
+
+  async function list(force) {
     const cfg = getConfig().providers || {};
+    const cc = claude ? await claudeLogin(force) : null;
     return Object.entries(PROVIDERS).map(([id, p]) => ({
       id, name: p.name, kind: p.kind, keyUrl: p.keyUrl || '', noKey: !!p.noKey, optionalKey: !!p.optionalKey,
       hasKey: !!keys[id], baseURL: cfg[id]?.baseURL || p.baseURL, defaultBaseURL: p.baseURL,
       models: [...new Set([...(cfg[id]?.models || []), ...p.models])],
+      ...(p.kind === 'anthropic' && cc ? { authPref: cfg[id]?.auth || 'auto', auth: authOf(id), claudeLogin: cc } : {}),
     }));
   }
 
@@ -67,7 +117,9 @@ function createAI({ dir, getConfig }) {
   async function models(id) {
     const p = provider(id);
     let ids = [];
-    if (p.kind === 'anthropic') {
+    if (p.viaCli) {
+      ids = [...PROVIDERS.anthropic.models]; // the CLI has no model listing; it accepts any id the account can use
+    } else if (p.kind === 'anthropic') {
       const c = anthropicClient(p);
       for await (const m of c.models.list({ limit: 100 })) ids.push(m.id);
     } else if (p.kind === 'gemini') {
@@ -100,6 +152,7 @@ function createAI({ dir, getConfig }) {
     let text = '';
     const emit = (t) => { if (t) { text += t; onDelta(t); } };
     try {
+      if (p.viaCli) return await chatCli(p, { model, system, messages, effort }, ctrl.signal, emit, () => text);
       if (p.kind === 'anthropic') {
         const c = anthropicClient(p);
         const body = { model, max_tokens: maxTokens || 32000, messages: messages.map((m) => ({ role: m.role, content: m.content })) };
@@ -149,7 +202,50 @@ function createAI({ dir, getConfig }) {
 
   function abort(reqId) { running.get(reqId)?.abort(); }
 
+  /** One turn through `claude -p` (stream-json): no tools, no settings/MCP/session files, a neutral cwd. */
+  function chatCli(p, { model, system, messages, effort }, signal, emit, soFar) {
+    const cwd = path.join(dir, 'claude-cli');
+    fs.mkdirSync(cwd, { recursive: true });
+    const args = ['-p', '--output-format', 'stream-json', '--include-partial-messages', '--verbose', '--tools', '',
+      '--no-session-persistence', '--strict-mcp-config', '--setting-sources', '', '--model', model];
+    if (system) args.push('--system-prompt', system);
+    if (effort && CLAUDE_EFFORT.test(model)) args.push('--effort', effort);
+    return new Promise((resolve, reject) => {
+      const child = spawn(claude.bin(), args, { cwd, env: cliEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
+      let buf = '', err = '', result = null, stop = null, usage = null, settled = false;
+      const done = (fn, v) => { if (!settled) { settled = true; signal.removeEventListener('abort', kill); fn(v); } };
+      const kill = () => { child.kill('SIGTERM'); done(resolve, { text: soFar(), stop: 'aborted' }); };
+      signal.addEventListener('abort', kill);
+      child.on('error', (e) => done(reject, new Error(e.code === 'ENOENT' ? 'Claude Code is not installed — install it or add an Anthropic API key.' : e.message)));
+      child.stderr.on('data', (d) => { err += d; });
+      child.stdout.on('data', (d) => {
+        buf += d;
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+          if (!line) continue;
+          let j; try { j = JSON.parse(line); } catch { continue; }
+          if (j.type === 'stream_event') {
+            const ev = j.event;
+            if (ev?.type === 'content_block_delta' && ev.delta?.type === 'text_delta') emit(ev.delta.text);
+            else if (ev?.type === 'message_delta') { stop = ev.delta?.stop_reason || stop; usage = ev.usage || usage; }
+          } else if (j.type === 'result') result = j;
+        }
+      });
+      child.on('close', (code) => {
+        if (signal.aborted) return;
+        if (result?.is_error || (code && !soFar())) {
+          const msg = (typeof result?.result === 'string' && result.result) || err.trim().split('\n').pop() || `claude exited with code ${code}`;
+          return done(reject, new Error(/log ?in|auth|credential|401/i.test(msg) ? `Claude Code login: ${msg} — run \`claude auth login\` or add an API key.` : `Claude Code: ${msg}`));
+        }
+        if ((result?.stop_reason || stop) === 'refusal') emit('\n\n> The model declined this request.');
+        done(resolve, { text: soFar(), stop: result?.stop_reason || stop || 'end_turn', usage: result?.usage || usage });
+      });
+      child.stdin.end(cliPrompt(messages));
+    });
+  }
+
   return { list, setKey, models, chat, abort, hasKey: (id) => !!keys[id] };
 }
 
-module.exports = { createAI, PROVIDERS };
+module.exports = { createAI, PROVIDERS, cliPrompt };

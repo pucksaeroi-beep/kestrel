@@ -74,15 +74,39 @@ function providerCard(p) {
   };
   const card = h('div', { class: 'prov' + (usable(p) ? ' ready' : '') },
     h('div', { class: 'prov-head' }, h('span', { class: 'pdot' }), h('b', {}, p.name), h('span', { class: 'grow' }),
-      usable(p) ? h('span', { class: 'pill ok' }, p.noKey ? 'local' : 'ready') : null,
+      usable(p) ? h('span', { class: 'pill ok' }, p.noKey ? 'local' : p.auth === 'claude' ? 'Claude login' : 'ready') : null,
       p.keyUrl ? h('button', { class: 'link sm', onclick: () => window.ks.shell.external(p.keyUrl) }, 'Get a key ↗') : null),
-    p.noKey ? null : h('div', { class: 'prov-key' }, keyIn, h('button', { class: 'btn sm', onclick: saveKey }, 'Save'), p.hasKey ? h('button', { class: 'btn sm ghost', title: 'Remove key', onclick: async () => { await window.ks.ai.setKey(p.id, ''); await loadProviders(); draw(); } }, icon('trash')) : null),
+    p.claudeLogin ? anthropicAuth(p) : null,
+    p.noKey || p.auth === 'claude' ? null : h('div', { class: 'prov-key' }, keyIn, h('button', { class: 'btn sm', onclick: saveKey }, 'Save'), p.hasKey ? h('button', { class: 'btn sm ghost', title: 'Remove key', onclick: async () => { await window.ks.ai.setKey(p.id, ''); await loadProviders(); draw(); } }, icon('trash')) : null),
     showUrl || p.id === 'custom' ? h('div', { class: 'prov-key' }, urlIn, h('button', { class: 'btn sm', onclick: async () => { await window.ks.ai.setProvider(p.id, { baseURL: urlIn.value.trim() }); await loadProviders(); toast('Base URL saved'); draw(); } }, 'Set URL')) : null,
     h('div', { class: 'prov-models' },
       p.models.length ? h('span', { class: 'muted sm' }, `${p.models.length} models`) : h('span', { class: 'muted sm' }, usable(p) ? 'No models loaded yet' : ''),
       usable(p) ? h('button', { class: 'link sm', onclick: async (e) => { e.currentTarget.textContent = 'Loading…'; try { await window.ks.ai.models(p.id); await loadProviders(); toast(`Loaded ${p.name} models`); } catch (err) { toast(err.message, 'error'); } draw(); } }, 'Fetch models') : null));
   keyIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveKey(); });
   return card;
+}
+
+/** Anthropic: API key, or the Claude Code login (Pro/Max/Team/Enterprise plan) through the claude CLI. */
+function anthropicAuth(p) {
+  const cc = p.claudeLogin;
+  const pick = async (auth) => { await window.ks.ai.setProvider(p.id, { auth }); await loadProviders(); draw(); };
+  const opt = (v, label, tip) => h('button', { class: p.authPref === v ? 'on' : '', title: tip, onclick: () => pick(v) }, label);
+  const status = cc.loggedIn
+    ? h('span', { class: 'muted sm' }, `Signed in to Claude Code${cc.plan ? ` · ${cc.plan[0].toUpperCase()}${cc.plan.slice(1)} plan` : cc.method ? ` · ${cc.method}` : ''}`)
+    : h('span', { class: 'muted sm' }, cc.error || 'Not signed in to Claude Code');
+  const signIn = () => {
+    if (!S.ws) { toast('Open a folder first, or run `claude auth login` in Terminal'); return; }
+    close(); exec('terminal.new', { command: 'claude auth login', title: 'claude login' });
+    toast('Finish signing in, then reopen Settings → Models');
+  };
+  return h('div', { class: 'prov-auth' },
+    h('div', { class: 'seg sm' }, opt('auto', 'Auto', 'API key when one is saved, otherwise the Claude Code login'), opt('key', 'API key', 'Always use the API key'), opt('claude', 'Claude login', 'Always use the Claude Code login (your Claude plan)')),
+    h('div', { class: 'hrow' }, h('span', { class: 'pdot' + (cc.loggedIn ? ' on' : '') }), status, h('span', { class: 'grow' }),
+      cc.loggedIn ? null : h('button', { class: 'link sm', onclick: signIn }, 'Sign in…'),
+      h('button', { class: 'link sm', title: 'Check again', onclick: async () => { await loadProviders(true); draw(); } }, 'Refresh')),
+    h('div', { class: 'muted sm' }, p.authPref === 'auto'
+      ? (p.auth === 'claude' ? 'No API key saved — using your Claude Code login, like the claude CLI does.' : 'Using the saved API key. Remove it to use your Claude Code login.')
+      : p.auth === 'claude' ? 'Requests go through the claude CLI with your plan’s usage limits. Autocomplete is slower this way.' : 'Requests use the API key below and are billed to your Console account.'));
 }
 
 const modelPick = (field, label) => {

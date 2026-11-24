@@ -100,13 +100,15 @@ Open **Settings → Models & API Keys**, paste a key, and press **Fetch models**
 
 | Provider | Notes |
 |---|---|
-| **Anthropic** | Claude Opus 5.5 (default), Sonnet 5.5, Haiku 5.5, Fable 5.2. Uses the official SDK, with effort control and server-side refusal fallback. |
+| **Anthropic** | Claude Opus 5.5 (default), Sonnet 5.5, Haiku 5.5, Fable 5.2. Use an **API key** (official SDK, with effort control and server-side refusal fallback) or **no key at all**: your **Claude Code login** (Pro/Max/Team/Enterprise). |
 | **OpenAI** | Any chat model your key can use |
 | **Google Gemini** | Uses the Gemini streaming API |
 | **OpenRouter** | Hundreds of models through one key |
 | **Groq**, **DeepSeek**, **Mistral**, **xAI** | OpenAI-compatible endpoints |
 | **Ollama** | Local, no key needed (`http://localhost:11434/v1`) |
 | **OpenAI-compatible** | Any base URL, e.g. LM Studio, vLLM, LiteLLM or a company proxy |
+
+**No Anthropic API key?** Just like Claude Code itself, Kestrel falls back to your Claude Code login. Requests run through the official `claude` CLI on your Mac (`claude -p`, no tools) and count against your plan's usage limits. The Anthropic card shows whether you're signed in and has a **Sign in…** button that runs `claude auth login`. Pick **Auto** (key if saved, otherwise the login), **API key**, or **Claude login**. Kestrel never reads or stores the login token itself. Autocomplete works this way too, but it's slower because each suggestion starts the CLI.
 
 You can pick different models for **chat**, **⌘K / Apply**, and **autocomplete**. You can also add your own instructions to every chat, for example "Answer in Thai".
 
@@ -164,7 +166,7 @@ Then set the Anthropic base URL to `http://127.0.0.1:8787` in **Settings → Mod
                 │ contextBridge (window.ks): named calls only, no raw fs/shell
 ┌───────────────┴─────────────── Main process ────────────────────────────────────┐
 │ workspace.cjs: file access confined to the open folder (path traversal refused)  │
-│ ai.cjs:        Anthropic SDK + OpenAI/Gemini SSE streaming, keys in Keychain     │
+│ ai.cjs:        Anthropic SDK or claude -p (login) · OpenAI/Gemini SSE · Keychain │
 │ ide.cjs:       Claude Code bridge: WebSocket MCP server on 127.0.0.1             │
 │                + ~/.claude/ide/<port>.lock (0600, random auth token)             │
 │ node-pty:      your login shell; CLAUDE_CODE_SSE_PORT set so claude auto-connects│
@@ -201,6 +203,7 @@ Kestrel is an independent project. It is not affiliated with Anthropic, Cursor o
 - **⌘K แก้โค้ดตรงจุด:** เลือกโค้ด พิมพ์สิ่งที่อยากแก้ แล้วดูบรรทัดเก่า (สีแดง) เทียบกับบรรทัดใหม่ (สีเขียว) จากนั้นกด ⌘↵ เพื่อรับ หรือ Esc เพื่อยกเลิก
 - **Claude Code ในตัว (⌘Esc):** รัน `claude` CLI ตัวจริงที่แผงด้านขวา และเชื่อมกับ editor ด้วยโปรโตคอลเดียวกับ extension ของ VS Code เมื่อ Claude จะแก้ไฟล์จะขึ้นเป็น diff ให้กด Accept/Reject Claude เห็นโค้ดที่คุณเลือกอยู่ และ ⌥⌘K ใช้ส่งโค้ดที่เลือกไปเป็น @mention
 - **API key 10 ค่าย:** Anthropic, OpenAI, Gemini, OpenRouter, Groq, DeepSeek, Mistral, xAI, Ollama (รันในเครื่อง) และ endpoint ใดก็ได้ที่ใช้รูปแบบเดียวกับ OpenAI key ถูกเข้ารหัสด้วย Keychain ของ macOS และไม่ส่งไปที่อื่นนอกจากค่ายที่คุณเลือก
+- **ไม่มี API key ของ Anthropic ก็ใช้ได้:** ใช้การล็อกอิน Claude Code (แพ็กเกจ Pro/Max) ผ่าน `claude` CLI แบบเดียวกับที่ Claude Code ทำ โดยนับรวมกับโควตาของแพ็กเกจ
 - **ฟีเจอร์ editor ครบ:** Monaco (แกนเดียวกับ VS Code), แท็บ, ตัวจัดการไฟล์, ค้นหาทั้งโปรเจกต์, เทียบ git diff, เทอร์มินัล, ⌘P/⇧⌘P และธีมมืด/สว่าง
 
 > ข้อจำกัด: Kestrel ไม่ได้ fork มาจาก VS Code จึงติดตั้ง extension จาก marketplace ไม่ได้ แต่รองรับ Claude Code แบบ native ในตัวแทน
