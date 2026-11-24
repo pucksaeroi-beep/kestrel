@@ -718,3 +718,8 @@ button.sb-item:hover { background: var(--bg3); color: var(--fg); }
 .ccu-rec { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; }
 .ccu-rec a { color: inherit; }
 .ccu-sub { margin-top: 6px; }
+/* Claude Code: dropped / pasted images */
+.cc-dropping { outline: 2px dashed var(--accent); outline-offset: -4px; background: var(--accent-soft); }
+.cc-imgchip { display: inline-flex; align-items: center; gap: 6px; }
+.cc-imgchip img { width: 22px; height: 22px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); }
+.chip.mini.cc-imgchip img { width: 16px; height: 16px; }

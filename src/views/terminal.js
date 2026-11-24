@@ -60,6 +60,7 @@ export async function createTerminal(el, { cwd, command: cmd, onExit, onTitle } 
     e.preventDefault();
     const p = e.dataTransfer.getData('text/kestrel-path');
     if (p) window.ks.pty.write(id, quote(p) + ' ');
+    else for (const f of [...(e.dataTransfer.files || [])]) { const a = window.ks.pathOf(f); if (a) window.ks.pty.write(id, quote(a) + ' '); }
     term.focus();
   });
   const ro = new ResizeObserver(() => { if (el.offsetParent) try { fit.fit(); } catch { /* ignore */ } });

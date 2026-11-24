@@ -264,6 +264,25 @@ function registerIpc() {
     if (st.size > 8e6) throw new Error('File too large');
     return fs.promises.readFile(abs, 'utf8');
   });
+  // files dropped from Finder: what they are, and copying them into the project
+  handle('fs:statAbs', async (abs) => {
+    const st = await fs.promises.stat(abs);
+    let rel = null;
+    if (ws) { const r = path.relative(ws.root, fs.realpathSync(abs)); if (r && !r.startsWith('..') && !path.isAbsolute(r)) rel = r.split(path.sep).join('/'); }
+    return { dir: st.isDirectory(), size: st.size, rel };
+  });
+  handle('fs:import', async (list, dir) => {
+    const w = need(); const into = w.inside(dir || '');
+    const out = [];
+    for (const src of list) {
+      const ext = path.extname(src), base = path.basename(src, ext);
+      let dest = path.join(into, base + ext);
+      for (let i = 2; fs.existsSync(dest); i++) dest = path.join(into, `${base} ${i}${ext}`);
+      await fs.promises.cp(src, dest, { recursive: true, errorOnExist: true, force: false });
+      out.push(w.rel(dest));
+    }
+    return out;
+  });
   handle('git:status', () => need().gitStatus());
   handle('git:head', (f) => need().gitHead(f));
 

@@ -21,8 +21,8 @@ export function mount(el) {
         h('button', { class: 'ibtn', title: 'Collapse All', onclick: () => { expanded.clear(); expanded.add(''); render(); } }, icon('collapse')))),
     list);
   list.addEventListener('contextmenu', (e) => { if (e.target === list) { e.preventDefault(); menu(null, e); } });
-  list.addEventListener('dragover', (e) => { if (e.target === list) e.preventDefault(); });
-  list.addEventListener('drop', (e) => { if (e.target === list) drop(e, ''); });
+  list.addEventListener('dragover', (e) => { e.preventDefault(); if (e.target === list && fromFinder(e)) e.dataTransfer.dropEffect = 'copy'; });
+  list.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); if (e.target === list) drop(e, ''); });
   on('active', (t) => { if (t?.path && t.kind !== 'diff') { selected = t.path; revealPath(t.path, false); } });
   on('git', render);
   refresh(true);
@@ -99,9 +99,9 @@ function render() {
       ondblclick: () => { if (!e.dir) E.open(e.path, { pin: true }); },
       oncontextmenu: (ev) => { ev.preventDefault(); selected = e.path; render(); menu(e, ev); },
       ondragstart: (ev) => { ev.dataTransfer.setData('text/kestrel-path', e.path); ev.dataTransfer.effectAllowed = 'move'; },
-      ondragover: (ev) => { if (e.dir) { ev.preventDefault(); ev.currentTarget.classList.add('drop'); } },
+      ondragover: (ev) => { if (e.dir || fromFinder(ev)) { ev.preventDefault(); ev.currentTarget.classList.add('drop'); } },
       ondragleave: (ev) => ev.currentTarget.classList.remove('drop'),
-      ondrop: (ev) => { ev.currentTarget.classList.remove('drop'); if (e.dir) drop(ev, e.path); },
+      ondrop: (ev) => { ev.currentTarget.classList.remove('drop'); ev.stopPropagation(); drop(ev, e.dir ? e.path : dirname(e.path)); },
     },
     e.dir ? icon(expanded.has(e.path) ? 'chevronDown' : 'chevronRight', 'twisty') : h('span', { class: 'twisty' }),
     e.dir ? icon(expanded.has(e.path) ? 'folderOpen' : 'explorer', 'folder-ic') : h('span', { class: 'fbadge', style: { color: col } }, lbl),
@@ -155,12 +155,27 @@ async function remove(p) {
   try { await window.ks.fs.trash(p); E.deleted(p); S.files = null; refresh(true); } catch (e) { toast(e.message, 'error'); }
 }
 
+const fromFinder = (ev) => [...(ev.dataTransfer?.types || [])].includes('Files');
+
 async function drop(ev, dir) {
   ev.preventDefault();
+  if (fromFinder(ev) && ev.dataTransfer.files.length) return importFiles([...ev.dataTransfer.files].map((f) => window.ks.pathOf(f)).filter(Boolean), dir);
   const from = ev.dataTransfer.getData('text/kestrel-path');
   if (!from || from === dir || dir.startsWith(from + '/') || dirname(from) === dir) return;
   const to = (dir ? dir + '/' : '') + basename(from);
   try { await window.ks.fs.rename(from, to); await E.renamed(from, to); S.files = null; refresh(true); } catch (e) { toast(e.message, 'error'); }
+}
+
+/** Files dragged in from Finder: copied into `dir` (never overwriting: "name 2.png"). */
+async function importFiles(list, dir) {
+  if (!list.length) return;
+  try {
+    const made = await window.ks.fs.import(list, dir);
+    S.files = null;
+    await refresh(true);
+    if (made.length) await revealPath(made[made.length - 1]);
+    toast(made.length === 1 ? `Copied ${basename(made[0])} into ${dir || 'the project'}` : `Copied ${made.length} items into ${dir || 'the project'}`);
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 function menu(e, ev) {

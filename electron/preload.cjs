@@ -19,7 +19,7 @@ contextBridge.exposeInMainWorld('ks', {
   ws: { pick: call('ws:pick'), open: call('ws:open'), close: call('ws:close'), forget: call('ws:forget') },
   fs: {
     list: call('fs:list'), read: call('fs:read'), write: call('fs:write'), create: call('fs:create'), rename: call('fs:rename'),
-    trash: call('fs:trash'), files: call('fs:files'), search: call('fs:search'), abs: call('fs:abs'), readAbs: call('fs:readAbs'),
+    trash: call('fs:trash'), files: call('fs:files'), search: call('fs:search'), abs: call('fs:abs'), readAbs: call('fs:readAbs'), statAbs: call('fs:statAbs'), import: call('fs:import'),
     onChanged: on('fs:changed'),
   },
   git: { status: call('git:status'), head: call('git:head') },

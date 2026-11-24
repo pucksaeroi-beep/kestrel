@@ -271,11 +271,20 @@ async function boot() {
     window.ks.app.closeNow();
   });
   document.addEventListener('dragover', (e) => e.preventDefault());
-  document.addEventListener('drop', (e) => {
+  // Finder drops that no panel handled (the explorer copies, Claude Code attaches, the terminal pastes paths):
+  // a folder opens as the workspace; files open in the editor when they belong to it.
+  document.addEventListener('drop', async (e) => {
     e.preventDefault();
-    const f = e.dataTransfer.files?.[0];
-    const p = f && window.ks.pathOf(f);
-    if (p && !e.target.closest?.('.xterm, .tree')) openPath(p);
+    if (e.target.closest?.('.xterm, .tree')) return;
+    for (const f of [...(e.dataTransfer.files || [])]) {
+      const p = window.ks.pathOf(f);
+      const st = p && (await window.ks.fs.statAbs(p).catch(() => null));
+      if (!st) continue;
+      if (st.dir) { if (st.rel == null) return openPath(p); continue; }
+      if (st.rel != null) E.open(st.rel, { pin: true });
+      else if (S.ws) toast(`${f.name} is outside this project. Drop it on the Explorer to copy it in, or on Claude Code to attach it.`);
+      else return toast('Drop a folder here to open it.');
+    }
   });
 
   if (st.workspace) await enter(st.workspace); else welcome();

@@ -73,6 +73,16 @@ export function mount(el) {
     h('button', { class: 'ibtn', title: 'Attach a file from this project (@)', onclick: () => pickFile() }, icon('plus')),
     actBtn, modelBtn, h('span', { class: 'grow' }), modeBtn, sendBtn));
   el.append(head, scroller, composer);
+  // drop files/images from Finder or the explorer, paste screenshots
+  el.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; el.classList.add('cc-dropping'); });
+  el.addEventListener('dragleave', (e) => { if (!el.contains(e.relatedTarget)) el.classList.remove('cc-dropping'); });
+  el.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); el.classList.remove('cc-dropping'); attachDropped(e.dataTransfer).catch((x) => toast(x.message, 'error')); });
+  input.addEventListener('paste', (e) => {
+    const imgs = [...(e.clipboardData?.files || [])].filter(isImage);
+    if (!imgs.length) return;
+    e.preventDefault();
+    Promise.all(imgs.map(addImage)).catch((x) => toast(x.message, 'error'));
+  });
   on('active', renderChips);
   on('selection', () => { if (document.activeElement !== input) renderChips(); });
   window.ks.cc.onMsg((s, m) => { if (s === sid) onMessage(m); });
@@ -135,7 +145,8 @@ function setBusy(v) { busy = v; renderBar(); }
 
 // ---------------- sending ----------------
 async function send(textArg) {
-  const text = (textArg ?? input.value).trim();
+  let text = (textArg ?? input.value).trim();
+  if (!text && textArg == null && pending.some((c) => c.type === 'image')) text = 'Look at the attached image.';
   if (!text) return;
   const sl = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text);
   const cmd = sl && LOCAL.find((c) => (c.name === sl[1] || c.aliases?.includes(sl[1])) && (!sl[2] || c.argumentHint));
@@ -149,7 +160,8 @@ async function send(textArg) {
   const ctx = text.startsWith('/') ? [] : currentContext();
   let wire = text;
   const sel = ctx.find((c) => c.type === 'selection');
-  const files = ctx.filter((c) => c.type === 'file').map((c) => '@' + c.path);
+  const files = ctx.filter((c) => c.type === 'file').map((c) => '@' + (/\s/.test(c.path) ? `"${c.path}"` : c.path));
+  const images = ctx.filter((c) => c.type === 'image');
   if (sel) wire = `<selection path="${sel.path}" lines="${sel.lines}">\n${sel.text}\n</selection>\n\n` + wire;
   if (files.length) wire = `(Open in the editor: ${files.join(' ')})\n\n` + wire;
   if (scroller.querySelector('.chat-empty')) clear(scroller);
@@ -161,7 +173,9 @@ async function send(textArg) {
   try {
     await ensure();
     setBusy(true);
-    turn.uuid = await window.ks.cc.send(sid, wire);
+    turn.uuid = await window.ks.cc.send(sid, images.length
+      ? [...images.map((c) => ({ type: 'image', source: { type: 'base64', media_type: c.media, data: c.data } })), { type: 'text', text: wire }]
+      : wire);
   } catch (e) { setBusy(false); note(e.message, 'err'); }
 }
 
@@ -239,7 +253,9 @@ function note(text, kind = 'muted') { addNode('cc-note ' + kind).append(kind ===
 
 function userBubble(text, ctx) {
   const n = addNode('msg user');
-  if (ctx?.length) n.append(h('div', { class: 'msg-ctx' }, ctx.map((c) => h('span', { class: 'chip mini', onclick: () => E.open(c.path) }, basename(c.path), c.lines ? ' ' + c.lines : ''))));
+  if (ctx?.length) n.append(h('div', { class: 'msg-ctx' }, ctx.map((c) => c.type === 'image'
+    ? h('span', { class: 'chip mini cc-imgchip', title: c.name }, h('img', { src: c.thumb }), c.name)
+    : h('span', { class: 'chip mini', onclick: () => { if (!c.path.startsWith('/')) E.open(c.path); } }, basename(c.path), c.lines ? ' ' + c.lines : ''))));
   n.append(h('div', { class: 'bubble' }, text));
   transcript.push({ role: 'user', text });
   return n;
@@ -520,6 +536,11 @@ function renderChips() {
   if (!chipsEl) return;
   clear(chipsEl);
   for (const c of currentContext()) {
+    if (c.type === 'image') {
+      chipsEl.append(h('span', { class: 'chip cc-imgchip', title: `${c.name} · ${(c.size / 1024).toFixed(0)} KB` }, h('img', { src: c.thumb }), c.name,
+        h('button', { class: 'chip-x', onclick: () => { pending = pending.filter((x) => x !== c); renderChips(); } }, icon('close'))));
+      continue;
+    }
     const [lbl, col] = badgeOf(c.path);
     chipsEl.append(h('span', { class: 'chip' + (c.auto ? ' auto' : ''), title: c.auto ? 'Sent with your message as context (× to stop)' : c.path },
       h('span', { class: 'fbadge', style: { color: col } }, lbl), basename(c.path), c.lines ? h('span', { class: 'muted' }, ' ' + c.lines) : null,
@@ -529,6 +550,45 @@ function renderChips() {
   if (!autoFile && E.activeFile()) chipsEl.append(h('button', { class: 'chip add', onclick: () => { autoFile = true; renderChips(); } }, icon('plus'), 'current file'));
 }
 export function addFile(p) { if (!pending.some((c) => c.path === p)) pending.push({ type: 'file', path: p }); renderChips(); focus(); }
+
+// ---------------- dropped and pasted files ----------------
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+const isImage = (f) => IMAGE_TYPES.includes(f.type);
+const MAX_SIDE = 2000, MAX_BYTES = 3.5e6; // the API takes ≤ 5 MB per image (base64 adds a third), and scales big ones down anyway
+
+const readB64 = (blob) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = () => rej(r.error); r.readAsDataURL(blob); });
+
+/** An image as the API wants it: base64 plus its type, shrunk to fit when it is too big. */
+async function addImage(file) {
+  let blob = file, media = file.type;
+  const bmp = await createImageBitmap(file).catch(() => null);
+  if (!bmp) throw new Error(`Could not read the image ${file.name || ''}`);
+  const scale = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
+  if (scale < 1 || file.size > MAX_BYTES) {
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+    blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.88)); media = 'image/jpeg';
+  }
+  const t = document.createElement('canvas'), ts = 64 / Math.max(bmp.width, bmp.height);
+  t.width = Math.max(1, Math.round(bmp.width * ts)); t.height = Math.max(1, Math.round(bmp.height * ts));
+  t.getContext('2d').drawImage(bmp, 0, 0, t.width, t.height);
+  bmp.close?.();
+  pending.push({ type: 'image', name: file.name || 'pasted image', media, data: await readB64(blob), size: blob.size, thumb: t.toDataURL('image/png') });
+  renderChips(); focus();
+}
+
+/** Drop on the panel: images are attached, other files and folders are @-mentioned. */
+async function attachDropped(dt) {
+  const inner = dt.getData('text/kestrel-path');
+  if (inner) { addFile(inner); return; }
+  for (const f of [...(dt.files || [])]) {
+    const abs = window.ks.pathOf(f);
+    const st = abs ? await window.ks.fs.statAbs(abs).catch(() => null) : null;
+    if (isImage(f) && !st?.dir) await addImage(f);
+    else if (abs) addFile(st?.rel ?? abs);
+  }
+}
 async function pickFile(fromAt, inline) {
   const { pickFile: pf } = await import('../views/palette.js');
   const p = await pf(inline ? 'Mention a file' : 'Attach a file');
