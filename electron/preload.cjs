@@ -39,7 +39,7 @@ contextBridge.exposeInMainWorld('ks', {
   },
   cc: {
     start: call('cc:start'), send: call('cc:send'), interrupt: call('cc:interrupt'), setMode: call('cc:setMode'), setModel: call('cc:setModel'), setEffort: call('cc:setEffort'), rewind: call('cc:rewind'),
-    commands: call('cc:commands'), models: call('cc:models'), close: call('cc:close'), list: call('cc:list'), history: call('cc:history'),
+    commands: call('cc:commands'), models: call('cc:models'), contextUsage: call('cc:contextUsage'), usage: call('cc:usage'), close: call('cc:close'), list: call('cc:list'), history: call('cc:history'),
     answer: (sid, rid, result) => ipcRenderer.send('cc:answer', sid, rid, result),
     onMsg: on('cc:msg'), onEnd: on('cc:end'), onPerm: on('cc:perm'), onPermCancel: on('cc:permCancel'), onStderr: on('cc:stderr'),
   },

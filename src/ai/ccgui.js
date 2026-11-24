@@ -1,9 +1,10 @@
 // Claude Code GUI: a chat-style front end for real Claude Code sessions (Agent SDK in the main process).
 // Same login, settings, CLAUDE.md, skills and slash commands as the CLI; adds permission modes, approval
 // cards with diffs, Claude's questions, plan review, session history and a / command menu.
-import { S, set, saveSettings, on, exec, basename } from '../state.js';
-import { h, icon, clear, toast, uid, popupMenu, popover, closeMenu, confirm, fmtRelative } from '../ui/h.js';
+import { S, set, saveSettings, on, emit, exec, basename } from '../state.js';
+import { h, icon, clear, toast, uid, popupMenu, popover, closeMenu, confirm, modal, fmtRelative } from '../ui/h.js';
 import { render as renderMd } from '../lib/markdown.js';
+import { contextView, usageView } from './ccinfo.js';
 import { badgeOf, languageOf } from '../lib/lang.js';
 import * as E from '../editor/editors.js';
 
@@ -24,6 +25,8 @@ const LOCAL = [
   { name: 'effort', description: 'Set the effort level', argumentHint: '[low|medium|high|xhigh|max|auto]', run: (a) => a ? setEffortCmd(a) : modelMenu(modelBtn) },
   { name: 'mode', description: 'Choose the permission mode', run: () => modeMenu(modeBtn) },
   { name: 'rewind', description: 'Go back to before an earlier message (files too)', run: () => rewindMenu(actBtn) },
+  { name: 'context', description: 'Show what fills the context window', run: () => showContext() },
+  { name: 'usage', description: 'Show plan usage limits and session cost', aliases: ['cost', 'stats'], run: () => showUsage() },
   { name: 'export', description: 'Copy the conversation as Markdown', run: () => exportChat() },
   { name: 'terminal', description: 'Switch to the claude CLI in a terminal', run: () => exec('claude.view', 'terminal') },
 ];
@@ -135,8 +138,13 @@ async function send(textArg) {
   const text = (textArg ?? input.value).trim();
   if (!text) return;
   const sl = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text);
-  const cmd = sl && LOCAL.find((c) => c.name === sl[1] && (!sl[2] || c.argumentHint));
+  const cmd = sl && LOCAL.find((c) => (c.name === sl[1] || c.aliases?.includes(sl[1])) && (!sl[2] || c.argumentHint));
   if (cmd) { input.value = ''; autosize(); hideSlash(); cmd.run(sl[2]?.trim() || ''); return; }
+  if (sl?.[1] === 'compact' && !turns.some((t) => !t.text.startsWith('/'))) {
+    input.value = ''; autosize(); hideSlash();
+    note('Nothing to compact yet: this session has no conversation. Send a message first, or open a past session (/resume).', 'muted');
+    return;
+  }
   hideSlash();
   const ctx = text.startsWith('/') ? [] : currentContext();
   let wire = text;
@@ -459,7 +467,8 @@ function onKey(e) {
     const items = [...slashEl.querySelectorAll('.cc-sl-item')];
     let i = items.findIndex((x) => x.classList.contains('on'));
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); i = (i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; items.forEach((x, k) => x.classList.toggle('on', k === i)); items[i]?.scrollIntoView({ block: 'nearest' }); return; }
-    const exact = e.key === 'Enter' && allCommands().some((c) => '/' + c.name === input.value.trim());
+    const typed = input.value.trim().slice(1);
+    const exact = e.key === 'Enter' && allCommands().some((c) => c.name === typed || c.aliases?.includes(typed));
     if (!exact && (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) && items[i]) { e.preventDefault(); items[i].click(); return; }
     if (exact) hideSlash();
     if (e.key === 'Escape') { e.preventDefault(); hideSlash(); return; }
@@ -551,6 +560,7 @@ function renderBar() {
   clear(modelBtn); modelBtn.append(h('span', { class: 'ell' }, modelName()), effortLevels().length ? h('span', { class: 'cc-chip-sub' }, cap(curEffort())) : null);
   modelBtn.title = 'Model and effort';
   clear(sendBtn); sendBtn.append(icon(busy ? 'stop' : 'send'));
+  emit('status');
   sendBtn.classList.toggle('stop', busy); sendBtn.title = busy ? 'Stop (Esc) — or type to queue a message' : 'Send (↵)';
 }
 
@@ -590,12 +600,14 @@ async function switchModel(arg) {
 function effortRow() {
   const levels = effortLevels();
   if (!levels.length) return null;
-  const label = h('span', { class: 'muted' }, `(${cap(curEffort())})`);
-  const dots = h('span', { class: 'cc-dots' });
-  const draw = () => { clear(dots); label.textContent = `(${cap(curEffort())})`; const at = levels.indexOf(curEffort());
-    levels.forEach((l, i) => dots.append(h('span', { role: 'button', class: 'cc-dot' + (i === at ? ' on' : '') + (i < at ? ' below' : ''), title: i === at ? cap(l) + ' (click again for the model default)' : cap(l), onclick: (e) => { e.stopPropagation(); applyEffort(i === at ? 'auto' : l).then(draw); } }))); };
+  const seg = h('div', { class: 'cc-seg' });
+  const draw = () => {
+    clear(seg);
+    for (const l of ['auto', ...levels]) seg.append(h('button', { class: 'cc-seg-b' + (curEffort() === l ? ' on' : ''), title: l === 'auto' ? 'The model\'s own default' : `Effort: ${l}`,
+      onclick: (e) => { e.stopPropagation(); applyEffort(l).then(draw); } }, l === 'xhigh' ? 'XHigh' : cap(l)));
+  };
   draw();
-  return h('div', { class: 'cc-pop-row' }, icon('gauge'), h('span', {}, 'Effort '), label, h('span', { class: 'grow' }), dots);
+  return h('div', { class: 'cc-eff' }, h('div', { class: 'cc-eff-h' }, icon('gauge'), h('span', {}, 'Effort'), h('span', { class: 'muted sm' }, 'how hard Claude thinks')), seg);
 }
 
 function modeMenu(anchor) {
@@ -614,11 +626,26 @@ async function loadModels() {
 async function modelMenu(anchor) {
   try { await loadModels(); } catch (e) { toast(e.message, 'error'); return; }
   const cur = set('ccModel') || 'default';
-  const pop = h('div', { class: 'cc-pop' }, h('div', { class: 'cc-pop-h' }, h('span', {}, 'Model')),
-    models.map((m) => h('button', { class: 'cc-row-it' + (m.value === cur ? ' on' : ''), title: m.description, onclick: () => { closeMenu(); switchModel(m.value); } }, h('span', { class: 'cc-nm' }, m.displayName), h('span', { class: 'muted sm ell' }, m.value === 'default' ? '' : m.description?.split('·')[0] || ''), h('span', { class: 'grow' }), m.value === cur ? icon('check', 'cc-ok') : null)),
-    effortLevels().length ? h('div', { class: 'cc-pop-sep' }) : null, effortRow());
+  const pop = h('div', { class: 'cc-pop' }, effortRow(), effortLevels().length ? h('div', { class: 'cc-pop-sep' }) : null,
+    h('div', { class: 'cc-pop-h' }, h('span', {}, 'Model')),
+    h('div', { class: 'cc-model-list' }, models.map((m) => h('button', { class: 'cc-row-it' + (m.value === cur ? ' on' : ''), title: m.description, onclick: () => { closeMenu(); switchModel(m.value); } }, h('span', { class: 'cc-nm' }, m.displayName), h('span', { class: 'muted sm ell' }, m.value === 'default' ? '' : m.description?.split('·')[0] || ''), h('span', { class: 'grow' }), m.value === cur ? icon('check', 'cc-ok') : null))));
   popover(pop, anchor, { class: 'cc-popover' });
+  pop.querySelector('.cc-row-it.on')?.scrollIntoView({ block: 'nearest' });
 }
+export function openModelMenu(anchor) { return modelMenu(anchor || modelBtn); }
+/** For the status bar: the Claude Code model and effort. */
+export function statusModel() { return { name: modelName(), effort: effortLevels().length ? cap(curEffort()) : '' }; }
+
+// ---------------- /context and /usage ----------------
+async function infoDialog(title, load, view, fallback) {
+  let data;
+  try { await ensure(); data = await load(); } catch (e) { data = null; }
+  if (!data) { if (fallback) send(fallback); return; }
+  modal(title, view(data), [], { class: 'cc-info', closeX: true });
+}
+const showContext = () => infoDialog('Context usage', () => window.ks.cc.contextUsage(sid), contextView, null);
+const showUsage = () => infoDialog('Account & Usage', async () => { const r = await window.ks.cc.usage(sid); return r?.usage || r?.account ? r : null; },
+  (r) => usageView(r, { open: (u) => window.ks.shell.external(u), run: (t) => send(t) }), null);
 
 /** The "/" button: filterable actions (Context, Model, Kestrel) plus every slash command. */
 function actionsMenu(anchor) {

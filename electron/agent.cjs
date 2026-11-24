@@ -106,6 +106,14 @@ function createAgent({ bin, env, emit }) {
     setModel: (sid, model) => need(sid).q.setModel(model === 'default' ? undefined : model),
     commands: (sid) => need(sid).q.supportedCommands(),
     models: (sid) => need(sid).q.supportedModels(),
+    contextUsage: (sid) => need(sid).q.getContextUsage(),
+    async usage(sid) {
+      const q = need(sid).q;
+      const [usage, account] = await Promise.all([
+        q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET().catch(() => null), // experimental: fall back to the /usage text if it goes away
+        q.accountInfo().catch(() => null)]);
+      return { usage, account };
+    },
     close(sid) {
       const s = sessions.get(sid);
       if (!s) return;

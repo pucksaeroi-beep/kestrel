@@ -146,6 +146,7 @@ export function modal(title, body, actions = [], opts = {}) {
       }
     };
     const dlg = h('div', { class: 'modal ' + (opts.class || '') },
+      opts.closeX ? h('button', { class: 'ibtn modal-x', title: 'Close (Esc)', onclick: () => close(undefined) }, icon('close')) : null,
       title ? h('h3', {}, title) : null,
       h('div', { class: 'modal-body' }, body),
       actions.length ? h('div', { class: 'modal-actions' }, actions.map((a) =>

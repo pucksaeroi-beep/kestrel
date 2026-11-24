@@ -111,6 +111,7 @@ function renderStatus() {
   const markers = monaco.editor.getModelMarkers({}).filter((m) => m.resource.scheme === 'file');
   const errs = markers.filter((m) => m.severity === 8).length, warns = markers.filter((m) => m.severity === 4).length;
   const { provider, model } = chatTarget();
+  const cc = S.layout.chat && S.layout.pane === 'claude' ? Claude.statusModel() : null, ccFront = !!cc;
   const left = h('div', { class: 'sb-left' },
     S.git ? h('button', { class: 'sb-item', title: 'Source Control', onclick: () => exec('view.show', 'scm') }, icon('branch'), S.git.branch || 'HEAD', Object.keys(S.git.files).length ? h('span', { class: 'sb-dim' }, ` · ${Object.keys(S.git.files).length}`) : null) : null,
     h('button', { class: 'sb-item', title: 'Problems in open files', onclick: () => E.getEditor().getAction('editor.action.marker.next')?.run() }, icon('x', 'sb-err'), String(errs), icon('alert', 'sb-warn'), String(warns)),
@@ -127,7 +128,8 @@ function renderStatus() {
   }
   right.append(
     h('button', { class: 'sb-item' + (set('autocomplete') ? ' on' : ''), title: 'AI autocomplete', onclick: () => exec('ai.toggleAutocomplete') }, icon('wand'), set('autocomplete') ? 'Tab' : 'Tab off'),
-    h('button', { class: 'sb-item ai', title: `${providerName(provider)} · ${model}`, onclick: () => exec('chat.model') }, icon('sparkle'), shortModel(model)));
+    ccFront ? h('button', { class: 'sb-item ai', title: 'Claude Code model and effort (this panel)', onclick: (e) => exec('claude.model', e.currentTarget) }, icon('claude'), cc.name, cc.effort ? h('span', { class: 'sb-dim' }, ' · ' + cc.effort) : null)
+      : h('button', { class: 'sb-item ai', title: `Chat and Tab autocomplete: ${providerName(provider)} · ${model}`, onclick: () => exec('chat.model') }, icon('sparkle'), shortModel(model)));
   ui.status.append(left, right);
 }
 
@@ -194,7 +196,7 @@ command('view.search', 'View: Show Search', () => exec('search.focus'));
 command('view.scm', 'View: Show Source Control', () => exec('view.show', 'scm'));
 command('layout.sidebar', 'View: Toggle Sidebar', (v) => { S.layout.sidebar = v ?? !S.layout.sidebar; applyLayout(); });
 command('layout.panel', 'View: Toggle Panel', (v) => { const was = S.layout.panel; S.layout.panel = v ?? !S.layout.panel; applyLayout(); if (S.layout.panel && !was) Term.panelShown(); if (!S.layout.panel) E.getEditor()?.focus(); });
-command('layout.chat', 'View: Toggle AI Pane', (v, pane) => { S.layout.chat = v ?? !S.layout.chat; if (pane) S.layout.pane = pane; applyLayout(); if (S.layout.chat && S.layout.pane === 'claude') Claude.focus(); });
+command('layout.chat', 'View: Toggle AI Pane', (v, pane) => { S.layout.chat = v ?? !S.layout.chat; if (pane) S.layout.pane = pane; applyLayout(); renderStatus(); if (S.layout.chat && S.layout.pane === 'claude') Claude.focus(); });
 command('workspace.open', 'File: Open Folder…', () => openFolder());
 command('workspace.close', 'File: Close Folder', async () => { if (await leaveWorkspace()) { await window.ks.ws.close(); welcome(); } });
 command('workspace.reveal', 'File: Reveal Active File in Finder', () => { const f = E.activeFile(); window.ks.shell.reveal(f || '.'); });

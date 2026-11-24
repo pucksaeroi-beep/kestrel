@@ -205,4 +205,7 @@ command('claude.mention', 'Claude Code: Send Selection / File', (p) => mention(p
 command('claude.restart', 'Claude Code: Restart', () => { stop(); start(); });
 command('claude.view', 'Claude Code: Switch Panel / Terminal', (v) => setView(v || (view() === 'gui' ? 'terminal' : 'gui')));
 command('claude.terminal', 'Claude Code: Open in Terminal (CLI)', () => { setView('terminal'); start(true); });
+command('claude.model', 'Claude Code: Choose Model and Effort…', (anchor) => { setView('gui'); exec('layout.chat', true, 'claude'); requestAnimationFrame(() => GUI.openModelMenu(anchor)); });
+/** What the status bar shows while the Claude Code panel is in front (null: show the Chat model). */
+export function statusModel() { return view() === 'gui' ? GUI.statusModel() : null; }
 command('claude.new', 'Claude Code: New Session', () => { setView('gui'); GUI.newSession(); GUI.focus(); });

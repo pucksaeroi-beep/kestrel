@@ -289,6 +289,8 @@ function registerIpc() {
   handle('cc:rewind', (sid, uuid, dryRun) => agent.rewind(sid, uuid, dryRun));
   handle('cc:commands', (sid) => agent.commands(sid));
   handle('cc:models', (sid) => agent.models(sid));
+  handle('cc:contextUsage', (sid) => agent.contextUsage(sid));
+  handle('cc:usage', (sid) => agent.usage(sid));
   handle('cc:close', (sid) => agent.close(sid));
   handle('cc:list', () => agent.list(need().root));
   handle('cc:history', (id) => agent.history(id, need().root));

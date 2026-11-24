@@ -673,3 +673,48 @@ button.sb-item:hover { background: var(--bg3); color: var(--fg); }
 .cc-row-it > span:first-child:not(.ell), .cc-row-it > .cc-nm { flex: none; }
 .cc-dot { cursor: pointer; }
 .cc-dots { height: 22px; }
+
+/* ---- Claude Code: effort control, model list, /context and /usage dialogs ---- */
+.menu.cc-popover { max-height: calc(100vh - 16px); overflow-y: auto; }
+.cc-model-list { max-height: min(340px, calc(100vh - 220px)); overflow-y: auto; }
+.cc-eff { padding: 8px 10px 6px; }
+.cc-eff-h { display: flex; align-items: center; gap: 7px; font-size: 12.5px; margin-bottom: 7px; }
+.cc-eff-h > .ic { width: 15px; height: 15px; color: var(--fg2); }
+.cc-eff-h .muted { margin-left: auto; }
+.cc-seg { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--bg4); }
+.cc-seg-b { flex: 1; padding: 5px 0; border: 0; border-radius: 6px; background: none; color: var(--fg2); font-size: 11.5px; cursor: pointer; }
+.cc-seg-b:hover { color: var(--fg); background: rgba(255,255,255,.05); }
+.cc-seg-b.on { background: var(--bg2, #2a2d33); color: var(--fg); box-shadow: 0 1px 3px rgba(0,0,0,.35); font-weight: 600; }
+.modal { position: relative; }
+.modal-x { position: absolute; top: 14px; right: 14px; }
+.modal.cc-info { width: 440px; max-height: calc(100vh - 60px); overflow-y: auto; }
+.cci { font-size: 12.5px; }
+.cci-model { color: var(--fg); margin-top: 2px; }
+.cci-total { color: var(--fg2); margin: 2px 0 10px; }
+.cci-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--bg4); margin-bottom: 14px; }
+.cci-bar > span { display: block; height: 100%; }
+.cci-table { display: flex; flex-direction: column; }
+.cci-tr { display: grid; grid-template-columns: 1fr 70px 56px; gap: 8px; padding: 5px 0; align-items: center; }
+.cci-tr > span:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.cci-th { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--fg3); border-bottom: 1px solid var(--line2); padding-bottom: 6px; margin-bottom: 2px; }
+.cci-name { display: flex; align-items: center; gap: 8px; }
+.cci-sw { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.cci-sw.none { background: none; }
+.cci-note { margin-top: 8px; }
+.cci-sec { margin-top: 16px; }
+.cci-h { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--fg3); margin-bottom: 8px; font-weight: 600; }
+.cci-li, .ccu-kv { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+.ccu-kv > span:last-child { text-align: right; min-width: 0; }
+.ccu-m { margin-bottom: 12px; }
+.ccu-mh { display: flex; justify-content: space-between; margin-bottom: 5px; }
+.ccu-bar { height: 6px; border-radius: 3px; background: var(--bg4); overflow: hidden; margin-bottom: 4px; }
+.ccu-bar > span { display: block; height: 100%; background: var(--fg2); border-radius: 3px; }
+.ccu-bar.warm > span { background: #d9a23a; }
+.ccu-bar.hot > span { background: #e0564f; }
+.ccu-link { display: inline-block; color: var(--fg2); font-size: 12px; }
+.ccu-tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 6px; background: var(--bg4); margin-bottom: 8px; }
+.ccu-tabs button { border: 0; background: none; color: var(--fg2); font-size: 11.5px; padding: 3px 10px; border-radius: 4px; cursor: pointer; }
+.ccu-tabs button.on { background: var(--bg2, #2a2d33); color: var(--fg); }
+.ccu-rec { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; }
+.ccu-rec a { color: inherit; }
+.ccu-sub { margin-top: 6px; }
