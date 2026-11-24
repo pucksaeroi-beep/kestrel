@@ -7,6 +7,7 @@ const { pathToFileURL } = require('url');
 const W = require('./workspace.cjs');
 const { createAI } = require('./ai.cjs');
 const { createIdeBridge } = require('./ide.cjs');
+const { createAgent } = require('./agent.cjs');
 
 app.setName('Kestrel');
 // Test hooks: a throwaway data dir + a scripted run that takes screenshots. Ignored in normal use.
@@ -56,6 +57,7 @@ function openWorkspace(dir) {
 function closeWorkspace() {
   watcher?.close(); watcher = null; ws = null;
   for (const id of [...ptys.keys()]) killPty(id);
+  agent.closeAll();
 }
 function wsInfo() { return ws ? { root: ws.root, name: path.basename(ws.root), session: config.sessions[ws.root] || null } : null; }
 function need() { if (!ws) throw new Error('No folder is open'); return ws; }
@@ -113,6 +115,7 @@ function killPty(id) { try { ptys.get(id)?.kill(); } catch { /* gone */ } ptys.d
 
 // ---------------- AI + Claude Code bridge ----------------
 const ai = createAI({ dir: DATA, getConfig: () => config, claude: { bin: () => resolveClaude(), env: () => ({ PATH: loginPath }) } });
+const agent = createAgent({ bin: () => resolveClaude(), env: () => ({ PATH: loginPath }), emit: (ch, ...a) => win?.webContents.send(ch, ...a) });
 const ideCalls = new Map();
 let ideSeq = 0;
 const ide = createIdeBridge({
@@ -276,6 +279,20 @@ function registerIpc() {
   handle('ai:chat', async (reqId, req) => ai.chat(reqId, req, (t) => win?.webContents.send('ai:delta', reqId, t)));
   handle('ai:abort', (reqId) => ai.abort(reqId));
 
+  handle('cc:start', (sid, o = {}) => agent.start(sid, { ...o, cwd: need().root }));
+  handle('cc:send', (sid, content) => agent.send(sid, content));
+  ipcMain.on('cc:answer', (_e, sid, rid, result) => agent.answer(sid, rid, result));
+  handle('cc:interrupt', (sid) => agent.interrupt(sid));
+  handle('cc:setMode', (sid, mode) => agent.setMode(sid, mode));
+  handle('cc:setModel', (sid, model) => agent.setModel(sid, model));
+  handle('cc:setEffort', (sid, level) => agent.setEffort(sid, level));
+  handle('cc:rewind', (sid, uuid, dryRun) => agent.rewind(sid, uuid, dryRun));
+  handle('cc:commands', (sid) => agent.commands(sid));
+  handle('cc:models', (sid) => agent.models(sid));
+  handle('cc:close', (sid) => agent.close(sid));
+  handle('cc:list', () => agent.list(need().root));
+  handle('cc:history', (id) => agent.history(id, need().root));
+
   ipcMain.on('ide:reply', (_e, id, ok, value) => { const c = ideCalls.get(id); if (!c) return; ideCalls.delete(id); ok ? c.resolve(value) : c.reject(new Error(value)); });
   ipcMain.on('ide:notify', (_e, method, params) => { if (['selection_changed', 'at_mentioned'].includes(method)) ide.notify(method, params); });
 
@@ -311,6 +328,6 @@ app.whenReady().then(async () => {
   app.on('activate', () => { if (!win) createWindow(); });
 });
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => { ide.stop(); for (const id of [...ptys.keys()]) killPty(id); saveConfig(true); });
+app.on('before-quit', () => { ide.stop(); agent.closeAll(); for (const id of [...ptys.keys()]) killPty(id); saveConfig(true); });
 process.on('exit', () => ide.stop());
 for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(sig, () => { ide.stop(); app.exit(0); });

@@ -82,7 +82,15 @@ Ghost-text completions come from any model you choose. A fast, cheap one is best
 
 ## ✳️ Claude Code, built in
 
-Kestrel runs the **official `claude` CLI** in the right-hand pane (**⌘Esc**) and connects it to the editor through the same local protocol the official VS Code and JetBrains integrations use:
+The **Claude Code** tab (**⌘Esc**) is a full Claude Code panel, like the one in the official VS Code extension. It runs real Claude Code sessions through the official [Agent SDK](https://docs.claude.com/en/docs/agent-sdk/overview) and your own `claude` CLI, so your login (API key or claude.ai subscription), settings, `CLAUDE.md`, skills, MCP servers and slash commands all work:
+
+- **Modes** (bottom right, **⇧Tab** to switch): **Manual** asks before every edit, **Edit automatically**, **Plan** explores and then shows a plan for you to approve, and **Auto** lets a safety check approve routine actions.
+- **The `/` button** opens a filterable actions menu: attach or mention a file, clear the conversation, **Rewind** (go back to before a message and restore the files Claude changed), past sessions, export as Markdown, switch model, set **effort**, and every slash command and skill you have. Typing `/` in the prompt works too.
+- **Approvals** show as cards: commands in full, file edits with a **View diff** button, Claude's questions as clickable options, and plans with *Yes, edit automatically / Yes, ask first / Keep planning*.
+- **Tool activity** (reads, searches, edits with +/− counts, commands, subagents, to-do lists) folds into compact rows you can open.
+- Sessions are saved by Claude Code itself, so **past sessions** reopen in the panel and also work with `claude --resume`.
+
+Prefer the terminal UI? Click the terminal icon in the panel header (or run `/terminal`). Kestrel then runs the `claude` CLI in the pane and connects it to the editor through the same local protocol the official VS Code and JetBrains integrations use:
 
 - **Edits arrive as diffs.** When Claude wants to change a file you get a diff tab. **Accept** lets Claude write it, and **Reject** tells Claude no. You can tweak the right-hand side before accepting.
 - **Claude sees your selection.** Whatever you select is shared live, so "fix this" just works.
@@ -149,7 +157,7 @@ Then set the Anthropic base URL to `http://127.0.0.1:8787` in **Settings → Mod
 | **⌘P** | Go to file | | **⌘L** | AI chat |
 | **⇧⌘P** | Command palette | | **⇧⌘L** | Add selection to chat |
 | **⌘K** | Edit with AI | | **⌥⌘N** | New chat |
-| **⌘Esc** | Launch Claude Code | | **⌥⌘K** | Send selection to Claude Code |
+| **⌘Esc** | Focus / unfocus Claude Code | | **⌥⌘K** | Send selection to Claude Code |
 | **⌃`** / **⌘J** | Toggle terminal | | **⌘B** | Toggle sidebar |
 | **⇧⌘F** | Find in files | | **⌥⌘B** | Toggle AI pane |
 | **⌘S** / **⌥⌘S** | Save / Save all | | **⌘W** | Close tab |
@@ -167,6 +175,7 @@ Then set the Anthropic base URL to `http://127.0.0.1:8787` in **Settings → Mod
 ┌───────────────┴─────────────── Main process ────────────────────────────────────┐
 │ workspace.cjs: file access confined to the open folder (path traversal refused)  │
 │ ai.cjs:        Anthropic SDK or claude -p (login) · OpenAI/Gemini SSE · Keychain │
+│ agent.cjs:     Claude Code panel: Agent SDK sessions on your claude CLI          │
 │ ide.cjs:       Claude Code bridge: WebSocket MCP server on 127.0.0.1             │
 │                + ~/.claude/ide/<port>.lock (0600, random auth token)             │
 │ node-pty:      your login shell; CLAUDE_CODE_SSE_PORT set so claude auto-connects│
@@ -201,7 +210,8 @@ Kestrel is an independent project. It is not affiliated with Anthropic, Cursor o
 
 - **แชตกับ AI (⌘L):** แนบไฟล์ที่เปิดอยู่ให้อัตโนมัติ ใช้ @ เพื่อเพิ่มไฟล์อื่น ทุกบล็อกโค้ดมีปุ่ม **Apply** ซึ่งเปิดหน้าเทียบ diff ให้ตรวจก่อนกด Accept
 - **⌘K แก้โค้ดตรงจุด:** เลือกโค้ด พิมพ์สิ่งที่อยากแก้ แล้วดูบรรทัดเก่า (สีแดง) เทียบกับบรรทัดใหม่ (สีเขียว) จากนั้นกด ⌘↵ เพื่อรับ หรือ Esc เพื่อยกเลิก
-- **Claude Code ในตัว (⌘Esc):** รัน `claude` CLI ตัวจริงที่แผงด้านขวา และเชื่อมกับ editor ด้วยโปรโตคอลเดียวกับ extension ของ VS Code เมื่อ Claude จะแก้ไฟล์จะขึ้นเป็น diff ให้กด Accept/Reject Claude เห็นโค้ดที่คุณเลือกอยู่ และ ⌥⌘K ใช้ส่งโค้ดที่เลือกไปเป็น @mention
+- **แผง Claude Code แบบเดียวกับ extension VS Code:** มีโหมด Manual / Edit automatically / Plan / Auto (กด ⇧Tab สลับ), ปุ่ม `/` สำหรับคำสั่งทั้งหมด, Rewind, ประวัติ session, เลือกโมเดลและ effort, การ์ดอนุมัติพร้อม diff ใช้ login, settings, CLAUDE.md, skills และ MCP เดียวกับ Claude Code
+- **Claude Code แบบ terminal:** รัน `claude` CLI ตัวจริงที่แผงด้านขวา และเชื่อมกับ editor ด้วยโปรโตคอลเดียวกับ extension ของ VS Code เมื่อ Claude จะแก้ไฟล์จะขึ้นเป็น diff ให้กด Accept/Reject Claude เห็นโค้ดที่คุณเลือกอยู่ และ ⌥⌘K ใช้ส่งโค้ดที่เลือกไปเป็น @mention
 - **API key 10 ค่าย:** Anthropic, OpenAI, Gemini, OpenRouter, Groq, DeepSeek, Mistral, xAI, Ollama (รันในเครื่อง) และ endpoint ใดก็ได้ที่ใช้รูปแบบเดียวกับ OpenAI key ถูกเข้ารหัสด้วย Keychain ของ macOS และไม่ส่งไปที่อื่นนอกจากค่ายที่คุณเลือก
 - **ไม่มี API key ของ Anthropic ก็ใช้ได้:** ใช้การล็อกอิน Claude Code (แพ็กเกจ Pro/Max) ผ่าน `claude` CLI แบบเดียวกับที่ Claude Code ทำ โดยนับรวมกับโควตาของแพ็กเกจ
 - **ฟีเจอร์ editor ครบ:** Monaco (แกนเดียวกับ VS Code), แท็บ, ตัวจัดการไฟล์, ค้นหาทั้งโปรเจกต์, เทียบ git diff, เทอร์มินัล, ⌘P/⇧⌘P และธีมมืด/สว่าง

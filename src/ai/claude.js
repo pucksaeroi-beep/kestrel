@@ -1,21 +1,37 @@
 // Claude Code: runs the real `claude` CLI in a pane and answers its IDE requests
 // (diffs to review, open file, selection, diagnostics) — the same protocol as the VS Code extension.
 import { monaco } from '../editor/monaco.js';
-import { S, set, on, emit, command, exec, basename } from '../state.js';
+import { S, set, saveSettings, on, emit, command, exec, basename } from '../state.js';
 import { h, icon, clear, toast, debounce } from '../ui/h.js';
 import * as E from '../editor/editors.js';
 import { createTerminal } from '../views/terminal.js';
+import * as GUI from './ccgui.js';
 
-let host, termEl, card, bar, term = null;
+let host, termEl, card, bar, term = null, guiHost, cliHost;
+const view = () => set('claudeView') || 'gui';
 
 export function mount(el) {
   host = el;
   termEl = h('div', { class: 'claude-term' });
   card = h('div', { class: 'claude-card' });
   bar = h('div', { class: 'claude-bar' });
-  el.append(card, bar, termEl);
+  guiHost = h('div', { class: 'cc-gui' });
+  cliHost = h('div', { class: 'cc-cli' }, card, bar, termEl);
+  el.append(guiHost, cliHost);
+  GUI.mount(guiHost);
   on('ide', renderCard);
   renderCard();
+  applyView();
+}
+
+function applyView() {
+  guiHost.style.display = view() === 'gui' ? '' : 'none';
+  cliHost.style.display = view() === 'gui' ? 'none' : '';
+}
+export function setView(v) {
+  saveSettings({ claudeView: v }); applyView();
+  exec('layout.chat', true, 'claude');
+  if (v === 'gui') GUI.focus(); else if (running()) focus();
 }
 
 export const running = () => !!term && !term.exited;
@@ -44,13 +60,16 @@ function renderCard() {
     h('div', { class: 'claude-tips' },
       h('div', { class: 'tip' }, h('kbd', {}, '⌥⌘K'), h('span', {}, 'send the selection to Claude as an @-mention')),
       h('div', { class: 'tip' }, h('kbd', {}, '⇧↵'), h('span', {}, 'new line in the Claude prompt')),
+      h('div', { class: 'tip muted sm' }, h('a', { href: '#', onclick: (e) => { e.preventDefault(); setView('gui'); } }, '← Back to the Claude Code panel'), ' (same features, with buttons and diffs)'),
       h('div', { class: 'tip muted sm' }, 'Not installed? ', h('a', { href: '#', onclick: (e) => { e.preventDefault(); window.ks.shell.external('https://docs.claude.com/en/docs/claude-code/setup'); } }, 'Install Claude Code'), '. Change the command in Settings → Claude Code.')));
 }
 const fact = (st, text) => h('div', { class: 'fact ' + st }, h('span', { class: 'fdot' }), h('span', {}, text));
 
-export async function start() {
+export async function start(forceTerminal) {
   if (!S.ws) { toast('Open a folder first'); return; }
   exec('layout.chat', true, 'claude');
+  if (view() === 'gui' && !forceTerminal) { GUI.toggleFocus(); return; }
+  if (view() !== 'terminal') { saveSettings({ claudeView: 'terminal' }); applyView(); }
   if (running()) { term.focus(); return; }
   term?.dispose(); clear(termEl);
   card.style.display = 'none'; termEl.style.display = '';
@@ -58,8 +77,8 @@ export async function start() {
   renderCard();
   requestAnimationFrame(() => { term.fit(); term.focus(); });
 }
-export function stop() { term?.dispose(); term = null; clear(termEl); renderCard(); }
-export function focus() { if (running()) requestAnimationFrame(() => { term.fit(); term.focus(); }); }
+export function stop() { term?.dispose(); term = null; clear(termEl); renderCard(); GUI.newSession(); }
+export function focus() { if (view() === 'gui') return GUI.focus(); if (running()) requestAnimationFrame(() => { term.fit(); term.focus(); }); }
 
 // ---------------- the IDE side of the protocol ----------------
 const absOf = (rel) => S.ws.root + '/' + rel;
@@ -167,6 +186,7 @@ export function mention(path) {
   const f = path || E.activeFile();
   if (!f) return;
   const s = !path || path === E.activeFile() ? ed.getSelection() : null;
+  if (view() === 'gui') { exec('layout.chat', true, 'claude'); if (path && path !== E.activeFile()) GUI.addFile(path); else GUI.focus(); return; }
   const params = { filePath: absOf(f) };
   if (s && !s.isEmpty()) { params.lineStart = s.startLineNumber - 1; params.lineEnd = s.endLineNumber - 1; }
   if (!S.ide.connected) {
@@ -183,3 +203,6 @@ command('claude.start', 'Claude Code: Launch', () => start());
 command('claude.focus', 'Claude Code: Focus', () => { exec('layout.chat', true, 'claude'); focus(); });
 command('claude.mention', 'Claude Code: Send Selection / File', (p) => mention(p));
 command('claude.restart', 'Claude Code: Restart', () => { stop(); start(); });
+command('claude.view', 'Claude Code: Switch Panel / Terminal', (v) => setView(v || (view() === 'gui' ? 'terminal' : 'gui')));
+command('claude.terminal', 'Claude Code: Open in Terminal (CLI)', () => { setView('terminal'); start(true); });
+command('claude.new', 'Claude Code: New Session', () => { setView('gui'); GUI.newSession(); GUI.focus(); });

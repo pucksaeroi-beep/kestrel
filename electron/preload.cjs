@@ -37,6 +37,12 @@ contextBridge.exposeInMainWorld('ks', {
     reply: (id, ok, value) => ipcRenderer.send('ide:reply', id, ok, value),
     notify: (method, params) => ipcRenderer.send('ide:notify', method, params),
   },
+  cc: {
+    start: call('cc:start'), send: call('cc:send'), interrupt: call('cc:interrupt'), setMode: call('cc:setMode'), setModel: call('cc:setModel'), setEffort: call('cc:setEffort'), rewind: call('cc:rewind'),
+    commands: call('cc:commands'), models: call('cc:models'), close: call('cc:close'), list: call('cc:list'), history: call('cc:history'),
+    answer: (sid, rid, result) => ipcRenderer.send('cc:answer', sid, rid, result),
+    onMsg: on('cc:msg'), onEnd: on('cc:end'), onPerm: on('cc:perm'), onPermCancel: on('cc:permCancel'), onStderr: on('cc:stderr'),
+  },
   shell: { reveal: call('shell:reveal'), external: call('shell:external') },
   clip: { copy: call('clip:copy') },
   pathOf: (file) => { try { return webUtils.getPathForFile(file); } catch { return ''; } },

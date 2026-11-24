@@ -2,6 +2,12 @@
 const s = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
 
 export const ICONS = {
+  hand: s('<path d="M8 12V5.5a1.5 1.5 0 0 1 3 0V11M11 10.5V4a1.5 1.5 0 0 1 3 0v6.5M14 10.5V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-.5a6 6 0 0 1-4.6-2.2L2.6 16a1.6 1.6 0 0 1 2.4-2.1L8 16.5V12"/>'),
+  bolt: s('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>'),
+  plan: s('<path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5M8.5 12.5h7M8.5 16h5"/>'),
+  gauge: s('<path d="M4 18a8 8 0 1 1 16 0"/><path d="m12 18 4-6"/>'),
+  rewind: s('<path d="M11 18 4 12l7-6zM20 18l-7-6 7-6z"/>'),
+  exportDoc: s('<path d="M12 3v12M7 8l5-5 5 5M5 15v4.5A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V15"/>'),
   branch: s('<circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="7" r="2.2"/><path d="M6 7.2v9.6M18 9.2c0 5-7 3.5-11.2 8"/>'),
   merge: s('<circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="12" r="2.2"/><path d="M6 7.2v9.6M7.5 6.6C9 10 12 12 15.8 12"/>'),
   commit: s('<circle cx="12" cy="12" r="3.5"/><path d="M3 12h5.5M15.5 12H21"/>'),
