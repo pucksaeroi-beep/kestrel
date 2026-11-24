@@ -20,7 +20,8 @@ const CYCLE = ['default', 'acceptEdits', 'plan', 'auto'];
 const LOCAL = [
   { name: 'clear', description: 'Start a new session', run: () => newSession() },
   { name: 'resume', description: 'Open a past session', run: () => historyMenu(histBtn) },
-  { name: 'model', description: 'Choose the model', run: () => modelMenu(modelBtn) },
+  { name: 'model', description: 'Switch the model (or pick from a list)', argumentHint: '[model]', run: (a) => a ? switchModel(a) : modelMenu(modelBtn) },
+  { name: 'effort', description: 'Set the effort level', argumentHint: '[low|medium|high|xhigh|max|auto]', run: (a) => a ? setEffortCmd(a) : modelMenu(modelBtn) },
   { name: 'mode', description: 'Choose the permission mode', run: () => modeMenu(modeBtn) },
   { name: 'rewind', description: 'Go back to before an earlier message (files too)', run: () => rewindMenu(actBtn) },
   { name: 'export', description: 'Copy the conversation as Markdown', run: () => exportChat() },
@@ -40,6 +41,7 @@ let commands = [];         // from the CLI
 let models = [];
 let mode = null;
 let autoFile = true, pending = [];
+const shown = new Set();    // message uuids already on screen
 const tools = new Map();   // tool_use_id → { card, name, input }
 const perms = new Map();   // rid → card
 let liveText = null, liveThink = null, stuck = true;
@@ -103,7 +105,7 @@ export function newSession() {
   if (sid) window.ks.cc.close(sid).catch(() => {});
   sid = null; sessionId = null; busy = false; mode = null;
   turns = []; lastAssistant = null; resumeNext = null; transcript = [];
-  tools.clear(); perms.clear(); liveText = liveThink = null;
+  tools.clear(); perms.clear(); shown.clear(); liveText = liveThink = null;
   if (!scroller) return;
   clear(scroller); scroller.append(emptyState());
   titleEl.textContent = 'New session';
@@ -132,8 +134,9 @@ function setBusy(v) { busy = v; renderBar(); }
 async function send(textArg) {
   const text = (textArg ?? input.value).trim();
   if (!text) return;
-  const cmd = /^\/(\S+)\s*$/.exec(text) && LOCAL.find((c) => c.name === text.slice(1).trim());
-  if (cmd) { input.value = ''; autosize(); hideSlash(); cmd.run(); return; }
+  const sl = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text);
+  const cmd = sl && LOCAL.find((c) => c.name === sl[1] && (!sl[2] || c.argumentHint));
+  if (cmd) { input.value = ''; autosize(); hideSlash(); cmd.run(sl[2]?.trim() || ''); return; }
   hideSlash();
   const ctx = text.startsWith('/') ? [] : currentContext();
   let wire = text;
@@ -161,7 +164,8 @@ function onMessage(m) {
       sessionId = m.session_id; mode = m.permissionMode || mode;
       if (m.slash_commands?.length && !commands.length) commands = m.slash_commands.map((n) => ({ name: n, description: '' }));
       S.cc = { model: m.model }; renderBar();
-    } else if (m.subtype === 'compact_boundary') note('Conversation compacted', 'sep');
+    } else if (m.subtype === 'session_title_changed' && m.title) titleEl.textContent = m.title;
+    else if (m.subtype === 'compact_boundary') note('Conversation compacted', 'sep');
     else if (m.subtype === 'api_retry') note(`API busy — retrying (attempt ${m.attempt ?? ''})…`, 'muted');
     else if (m.subtype === 'local_command_output' || m.subtype === 'command_output') outputBlock(m.content ?? m.output ?? '');
     else if (m.subtype === 'status' && m.permissionMode) { mode = m.permissionMode; renderBar(); }
@@ -169,6 +173,8 @@ function onMessage(m) {
   }
   if (m.type === 'stream_event') return onStream(m);
   if (m.parent_tool_use_id) { subagentActivity(m); return; }
+  // Claude Code re-sends some earlier command output after /compact; show each message once
+  if ((m.type === 'assistant' || m.type === 'user') && m.uuid) { if (shown.has(m.uuid)) return; shown.add(m.uuid); }
   if (m.type === 'assistant') {
     if (m.uuid) lastAssistant = m.uuid;
     for (const b of m.message?.content || []) {
@@ -199,7 +205,7 @@ function onMessage(m) {
       const msg = m.subtype === 'error_max_turns' ? 'Stopped: reached the turn limit.' : m.subtype === 'error_during_execution' ? null : (m.result || m.errors?.join('\n') || 'Claude Code stopped with an error.');
       if (msg) note(msg, 'err');
     }
-    if (m.duration_ms) note(`${(m.duration_ms / 1000).toFixed(1)}s · ${m.num_turns} turn${m.num_turns === 1 ? '' : 's'}`, 'foot');
+    if (m.duration_ms && m.num_turns) note(`${(m.duration_ms / 1000).toFixed(1)}s · ${m.num_turns} turn${m.num_turns === 1 ? '' : 's'}`, 'foot');
   }
 }
 function replayTurn(m, text) { turns.push({ text, node: userBubble(text, []), prevAssistant: lastAssistant, uuid: m.uuid }); }
@@ -453,7 +459,9 @@ function onKey(e) {
     const items = [...slashEl.querySelectorAll('.cc-sl-item')];
     let i = items.findIndex((x) => x.classList.contains('on'));
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); i = (i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; items.forEach((x, k) => x.classList.toggle('on', k === i)); items[i]?.scrollIntoView({ block: 'nearest' }); return; }
-    if ((e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) && items[i]) { e.preventDefault(); items[i].click(); return; }
+    const exact = e.key === 'Enter' && allCommands().some((c) => '/' + c.name === input.value.trim());
+    if (!exact && (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) && items[i]) { e.preventDefault(); items[i].click(); return; }
+    if (exact) hideSlash();
     if (e.key === 'Escape') { e.preventDefault(); hideSlash(); return; }
   }
   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); cycleMode(); return; }
@@ -471,15 +479,21 @@ function slashMenu() {
   const m = /^\/(\S*)$/.exec(input.value);
   if (!m) return hideSlash();
   const q = m[1].toLowerCase();
+  // exact name or alias first, then names that start with the text (shortest first), then the rest
+  const rank = (c) => { const n = c.name.toLowerCase(); return n === q || c.aliases?.includes(q) ? 0 : n.startsWith(q) ? 1 + n.length / 1000 : 2; };
   const list = allCommands().filter((c) => c.name.toLowerCase().includes(q) || c.aliases?.some((a) => a.includes(q)))
-    .sort((a, b) => (b.name.toLowerCase().startsWith(q) - a.name.toLowerCase().startsWith(q))).slice(0, 60);
+    .sort((a, b) => rank(a) - rank(b)).slice(0, 60);
   clear(slashEl);
   if (!list.length) { slashEl.append(h('div', { class: 'muted sm cc-sl-empty' }, sid ? 'No matching command' : 'Loading commands…')); }
-  list.forEach((c, k) => slashEl.append(h('button', { class: 'cc-sl-item' + (k === 0 ? ' on' : ''), onmousedown: (e) => e.preventDefault(), onclick: () => {
-    if (c.local) { input.value = ''; hideSlash(); c.run(); return; }
-    input.value = '/' + c.name + ' '; hideSlash(); input.focus(); autosize();
-  } }, h('b', {}, '/' + c.name), c.argumentHint ? h('span', { class: 'muted' }, ' ' + c.argumentHint) : null, h('span', { class: 'muted sm ell' }, c.description || ''))));
+  list.forEach((c, k) => slashEl.append(h('button', { class: 'cc-sl-item' + (k === 0 ? ' on' : ''), onmousedown: (e) => e.preventDefault(), onclick: () => pickCommand(c) }, h('b', {}, '/' + c.name), c.argumentHint ? h('span', { class: 'muted' }, ' ' + c.argumentHint) : null, h('span', { class: 'muted sm ell' }, c.description || ''))));
   slashEl.style.display = '';
+}
+/** Run a command that takes no arguments; otherwise put "/name " in the box so the user can add them. */
+function pickCommand(c) {
+  hideSlash();
+  if (c.local) { input.value = ''; autosize(); c.run(''); return; }
+  if (!c.argumentHint) { send('/' + c.name); return; }
+  input.value = '/' + c.name + ' '; autosize(); input.focus();
 }
 function hideSlash() { if (slashEl) slashEl.style.display = 'none'; }
 
@@ -516,13 +530,18 @@ async function pickFile(fromAt, inline) {
 
 // ---------------- mode, model, effort ----------------
 const modelInfo = () => models.find((m) => m.value === (set('ccModel') || 'default'));
+/** The chip shows the model the session is really using (from Claude Code), not just the saved choice. */
 const modelName = () => {
-  const cur = set('ccModel') || 'default', info = modelInfo();
-  if (cur === 'default' && S.cc?.model) { const hit = models.find((m) => m.resolvedModel === S.cc.model || m.value === S.cc.model); return hit?.displayName || S.cc.model.replace(/^claude-/, ''); }
+  const cur = set('ccModel') || 'default', info = modelInfo(), live = S.cc?.model;
+  if (live && (!info || info.resolvedModel !== live)) {
+    const hit = models.find((m) => m.value !== 'default' && (m.resolvedModel === live || m.value === live));
+    return hit?.displayName || live.replace(/^claude-/, '');
+  }
+  if (cur === 'default' && info?.resolvedModel) return models.find((m) => m.value !== 'default' && m.resolvedModel === info.resolvedModel)?.displayName || 'Default';
   return info?.displayName?.replace(/ \(.*\)$/, '') || cur;
 };
 const effortLevels = () => modelInfo()?.supportedEffortLevels || (models.length && !modelInfo()?.supportsEffort ? [] : EFFORTS.slice(0, 4));
-const curEffort = () => set('ccEffort') || 'medium';
+const curEffort = () => set('ccEffort') || 'auto'; // auto = the model's own default
 
 function renderBar() {
   if (!modeBtn) return;
@@ -542,8 +561,30 @@ async function applyMode(id) {
 function cycleMode() { const i = CYCLE.indexOf(curMode()); applyMode(CYCLE[(i + 1) % CYCLE.length]); }
 
 async function applyEffort(level) {
-  saveSettings({ ccEffort: level }); renderBar();
+  if (level === 'auto') level = null;
+  await saveSettings({ ccEffort: level }); renderBar();
   if (sid) await window.ks.cc.setEffort(sid, level).catch((e) => toast(e.message, 'error'));
+}
+async function setEffortCmd(arg) {
+  const level = arg.toLowerCase();
+  if (level !== 'auto' && !EFFORTS.includes(level)) { note(`Unknown effort “${arg}”. Use one of: ${EFFORTS.join(', ')}, auto`, 'err'); return; }
+  await applyEffort(level);
+  note(level === 'auto' ? 'Effort: the model default' : `Effort set to ${level}`, 'muted');
+}
+
+/** Switch the model by its value ("sonnet"), its name ("Sonnet 5.5") or a full id, then keep the chip in sync. */
+async function switchModel(arg) {
+  try { await loadModels(); } catch { /* no session yet: the choice applies when it starts */ }
+  const a = arg.trim(), lo = a.toLowerCase();
+  const hit = models.find((m) => m.value === a) || models.find((m) => m.displayName?.toLowerCase() === lo || m.resolvedModel === a);
+  const value = hit?.value || a;
+  if (sid) {
+    try { await window.ks.cc.setModel(sid, value); } catch (e) { note('Could not switch the model: ' + e.message, 'err'); return; }
+  }
+  await saveSettings({ ccModel: value });
+  S.cc = { ...S.cc, model: hit?.resolvedModel || (value === 'default' ? null : value) };
+  renderBar();
+  if (!sid) note(`Model: ${modelName()}`, 'muted');
 }
 /** "Effort (Medium) ●○○○" — click a dot to set the level. */
 function effortRow() {
@@ -552,7 +593,7 @@ function effortRow() {
   const label = h('span', { class: 'muted' }, `(${cap(curEffort())})`);
   const dots = h('span', { class: 'cc-dots' });
   const draw = () => { clear(dots); label.textContent = `(${cap(curEffort())})`; const at = levels.indexOf(curEffort());
-    levels.forEach((l, i) => dots.append(h('span', { role: 'button', class: 'cc-dot' + (i === at ? ' on' : '') + (i < at ? ' below' : ''), title: cap(l), onclick: (e) => { e.stopPropagation(); applyEffort(l); draw(); } }))); };
+    levels.forEach((l, i) => dots.append(h('span', { role: 'button', class: 'cc-dot' + (i === at ? ' on' : '') + (i < at ? ' below' : ''), title: i === at ? cap(l) + ' (click again for the model default)' : cap(l), onclick: (e) => { e.stopPropagation(); applyEffort(i === at ? 'auto' : l).then(draw); } }))); };
   draw();
   return h('div', { class: 'cc-pop-row' }, icon('gauge'), h('span', {}, 'Effort '), label, h('span', { class: 'grow' }), dots);
 }
@@ -574,9 +615,7 @@ async function modelMenu(anchor) {
   try { await loadModels(); } catch (e) { toast(e.message, 'error'); return; }
   const cur = set('ccModel') || 'default';
   const pop = h('div', { class: 'cc-pop' }, h('div', { class: 'cc-pop-h' }, h('span', {}, 'Model')),
-    models.map((m) => h('button', { class: 'cc-row-it' + (m.value === cur ? ' on' : ''), title: m.description, onclick: async () => {
-      closeMenu(); saveSettings({ ccModel: m.value }); renderBar(); if (sid) await window.ks.cc.setModel(sid, m.value).catch((e) => toast(e.message, 'error'));
-    } }, h('span', { class: 'cc-nm' }, m.displayName), h('span', { class: 'muted sm ell' }, m.value === 'default' ? '' : m.description?.split('·')[0] || ''), h('span', { class: 'grow' }), m.value === cur ? icon('check', 'cc-ok') : null)),
+    models.map((m) => h('button', { class: 'cc-row-it' + (m.value === cur ? ' on' : ''), title: m.description, onclick: () => { closeMenu(); switchModel(m.value); } }, h('span', { class: 'cc-nm' }, m.displayName), h('span', { class: 'muted sm ell' }, m.value === 'default' ? '' : m.description?.split('·')[0] || ''), h('span', { class: 'grow' }), m.value === cur ? icon('check', 'cc-ok') : null)),
     effortLevels().length ? h('div', { class: 'cc-pop-sep' }) : null, effortRow());
   popover(pop, anchor, { class: 'cc-popover' });
 }
@@ -595,7 +634,7 @@ function actionsMenu(anchor) {
     ['Model', [
       { label: 'Switch model…', icon: 'sparkle', kbd: modelName(), run: () => modelMenu(actBtn) },
       { el: effortRow() }]],
-    ['Slash commands', commands.map((c) => ({ label: '/' + c.name, sub: c.description, run: () => { input.value = '/' + c.name + ' '; autosize(); input.focus(); } }))],
+    ['Slash commands', commands.map((c) => ({ label: '/' + c.name, sub: c.description, run: () => pickCommand(c) }))],
     ['Kestrel', [{ label: 'Use the claude CLI in a terminal', icon: 'terminal', run: () => exec('claude.view', 'terminal') }]],
   ];
   const filter = h('input', { class: 'cc-filter', placeholder: 'Filter actions…', spellcheck: 'false' });
