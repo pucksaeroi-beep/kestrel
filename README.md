@@ -66,6 +66,7 @@ Ghost-text completions come from any model you choose. A fast, cheap one is best
 - **Source control** shows changed files, and any of them can open as a diff against `HEAD`.
 - **Integrated terminal** (xterm.js + a real PTY running your login shell). You can drag files into it to paste their paths.
 - **⌘P** opens files, **⇧⌘P** runs commands, `:` goes to a line and `@` jumps to a symbol, all from one fuzzy palette.
+- **Markdown preview** (⇧⌘V): GitHub-style rendering beside the editor, live as you type, with scroll sync, local images and coloured code blocks.
 - Image preview, external-change reload, auto save, format on save, and dark, light or system themes.
 
 <table>
@@ -152,6 +153,7 @@ Then set the Anthropic base URL to `http://127.0.0.1:8787` in **Settings → Mod
 | **⌘S** / **⌥⌘S** | Save / Save all | | **⌘W** | Close tab |
 | **⌃G** | Go to line | | **⇧⌘O** | Go to symbol |
 | **F12** | Go to definition | | **⌘= / ⌘-** | Zoom |
+| **⇧⌘V** | Markdown preview | | | |
 
 ## 🔧 How it works
 

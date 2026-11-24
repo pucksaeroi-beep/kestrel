@@ -170,6 +170,7 @@ function menu(e, ev) {
     { label: 'New Folder…', icon: 'newFolder', onClick: () => startCreate(true, e ? (e.dir ? p : dirname(p)) : '') },
     e ? '-' : null,
     e && !e.dir ? { label: 'Open to the Side', onClick: () => E.open(p, { pin: true }) } : null,
+    e && !e.dir && /\.(md|markdown|mdx)$/i.test(p) ? { label: 'Open Preview', icon: 'eye', onClick: async () => { await E.open(p, { pin: true }); E.setPreview(undefined, 'only'); } } : null,
     e && !e.dir ? { label: 'Add to Chat', icon: 'chat', onClick: () => exec('chat.addFile', p) } : null,
     e ? { label: 'Mention in Claude Code', icon: 'claude', onClick: () => exec('claude.mention', p) } : null,
     e && !e.dir && S.git?.files?.[p] ? { label: 'Compare with HEAD', icon: 'split2', onClick: () => exec('git.diffFile', p) } : null,

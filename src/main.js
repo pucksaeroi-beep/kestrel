@@ -212,7 +212,7 @@ const MENU = {
   'toggle-sidebar': 'layout.sidebar', 'toggle-terminal': 'terminal.toggle', 'toggle-panel': 'terminal.toggle', 'toggle-chat': 'layout.chat',
   'zoom-in': 'zoom.in', 'zoom-out': 'zoom.out', 'zoom-reset': 'zoom.reset', 'goto-line': 'editor.gotoLine', 'goto-symbol': 'editor.gotoSymbol', 'goto-def': 'editor.gotoDef',
   'next-tab': 'tab.next', 'prev-tab': 'tab.prev', chat: 'chat.focus', 'chat-add': 'chat.addSelection', 'inline-edit': 'ai.inlineEdit', 'chat-new': 'chat.new',
-  'toggle-autocomplete': 'ai.toggleAutocomplete', claude: 'claude.start', 'claude-mention': 'claude.mention', settings: 'settings.open', 'settings-models': 'settings.models',
+  'toggle-autocomplete': 'ai.toggleAutocomplete', claude: 'claude.start', 'claude-mention': 'claude.mention', settings: 'settings.open', 'settings-models': 'settings.models', 'md-preview': 'markdown.preview',
 };
 const NEEDS_WS = new Set(['explorer.newFile', 'file.save', 'file.saveAll', 'file.close', 'search.focus', 'palette.files', 'view.explorer', 'view.scm', 'layout.sidebar', 'terminal.toggle', 'layout.chat', 'chat.focus', 'chat.addSelection', 'ai.inlineEdit', 'chat.new', 'claude.start', 'claude.mention', 'workspace.close', 'workspace.reveal', 'editor.gotoLine', 'editor.gotoSymbol', 'tab.next', 'tab.prev']);
 

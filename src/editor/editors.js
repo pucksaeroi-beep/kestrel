@@ -3,11 +3,12 @@ import { monaco } from './monaco.js';
 import { S, set, on, emit, command, exec, basename, dirname } from '../state.js';
 import { h, icon, clear, toast, confirm, debounce, popupMenu } from '../ui/h.js';
 import { languageOf, badgeOf, isImage } from '../lib/lang.js';
+import { createPreview, isMarkdown } from './mdpreview.js';
 
 export const docs = new Map();   // path → { path, model, saved (alt version id), mtime, view }
 export let tabs = [];            // [{ id, kind:'file'|'diff'|'media', path, title, preview, ... }]
 export let active = null;        // tab id
-let editor, diffEditor, root, tabbar, crumbs, codeHost, diffHost, diffBar, mediaHost, emptyHost;
+let editor, diffEditor, root, tabbar, crumbs, codeHost, diffHost, diffBar, mediaHost, emptyHost, mdHost, md;
 
 const uri = (p) => monaco.Uri.file(S.ws.root + '/' + p);
 export const activeTab = () => tabs.find((t) => t.id === active) || null;
@@ -39,15 +40,25 @@ export function mount(el) {
   diffHost = h('div', { class: 'diff-host' }, diffBar, h('div', { class: 'diff-editor' }));
   mediaHost = h('div', { class: 'media-host' });
   emptyHost = h('div', { class: 'empty-host' });
-  el.append(tabbar, crumbs, h('div', { class: 'editor-stack' }, codeHost, diffHost, mediaHost, emptyHost));
+  mdHost = h('div', { class: 'md-host' });
+  // monaco-component: Monaco's theme variables (menu colours etc.) are scoped to that class, and its
+  // context menu is mounted beside the editor rather than inside .monaco-editor
+  el.append(tabbar, crumbs, h('div', { class: 'editor-stack monaco-component' }, codeHost, mdHost, diffHost, mediaHost, emptyHost));
+  md = createPreview(mdHost, {
+    onOpen: async (p, anchor) => { if (isMarkdown(p)) { const t = await open(p, { pin: true }); if (t) { setPreview(t, activeTab()?.md || 'side', t); if (anchor) setTimeout(() => md.scrollToAnchor(anchor), 50); } } else open(p, { pin: true }); },
+    onModeChange: (m) => setPreview(activeTab(), m),
+    onScrollTo: (line) => { const top = editor.getTopForLineNumber(Math.floor(line) + 1) + (line % 1) * editor.getOption(monaco.editor.EditorOption.lineHeight); editor.setScrollTop(top - 8); },
+  });
 
   editor = monaco.editor.create(codeHost, { ...options(), model: null, theme: themeName() });
   diffEditor = monaco.editor.createDiffEditor(diffHost.lastChild, { ...options(), theme: themeName(), renderSideBySide: true, originalEditable: false, readOnly: false, enableSplitViewResizing: true, renderOverviewRuler: false, ignoreTrimWhitespace: false, minimap: { enabled: false }, useInlineViewWhenSpaceIsLimited: true, renderSideBySideInlineBreakpoint: 560, renderValidationDecorations: 'off', hideUnchangedRegions: { enabled: true, contextLineCount: 4, minimumLineCount: 6, revealLineCount: 10 }, diffAlgorithm: 'advanced' });
   new ResizeObserver(() => { editor.layout(); const d = diffHost.lastChild; if (d.clientWidth) diffEditor.layout({ width: d.clientWidth, height: d.clientHeight }); }).observe(el);
 
   editor.onDidChangeCursorSelection(() => { emit('selection'); renderStatusLater(); });
+  editor.onDidScrollChange((e) => { if (e.scrollTopChanged && activeTab()?.md === 'side') md.scrollToLine(topLine()); });
   editor.onDidChangeModelContent(() => {
     const t = activeTab();
+    if (t?.md) updatePreviewLater();
     if (t?.preview) { t.preview = false; }
     renderTabsLater();
     if (set('autoSave') === 'afterDelay') autoSave();
@@ -247,6 +258,19 @@ export function deleted(path) {
   for (const t of [...tabs]) if (t.kind !== 'diff' && (t.path === path || t.path.startsWith(path + '/'))) close(t.id, { force: true });
 }
 
+// ---------------- markdown preview ----------------
+const topLine = () => { const st = editor.getScrollTop() + 8, lh = editor.getOption(monaco.editor.EditorOption.lineHeight); const ln = editor.getVisibleRanges()[0]?.startLineNumber || 1; const y = editor.getTopForLineNumber(ln); return ln - 1 + Math.max(0, Math.min(1, (st - y) / lh)); };
+const updatePreviewLater = debounce(() => { const t = activeTab(); if (t?.md && docs.get(t.path)) md.update(t.path, docs.get(t.path).model.getValue()); }, 120);
+/** mode: 'side' (editor + preview), 'only' (preview fills the tab) or null (editor only) */
+export function setPreview(t = activeTab(), mode) {
+  if (!t || t.kind !== 'file') return;
+  t.md = mode || null;
+  if (t.id !== active) return;
+  render();
+  if (t.md) { md.setMode(t.md); md.update(t.path, docs.get(t.path).model.getValue()); if (t.md === 'side') requestAnimationFrame(() => md.scrollToLine(topLine())); }
+  else editor.focus();
+}
+
 // ---------------- rendering ----------------
 let tabsT = 0, statusT = 0;
 const renderTabsLater = () => { if (!tabsT) tabsT = requestAnimationFrame(() => { tabsT = 0; renderTabs(); }); };
@@ -255,7 +279,12 @@ const renderStatusLater = () => { if (!statusT) statusT = setTimeout(() => { sta
 export function render() {
   renderTabs();
   const t = activeTab();
-  codeHost.style.display = t?.kind === 'file' ? '' : 'none';
+  const mdMode = t?.kind === 'file' ? t.md : null;
+  codeHost.style.display = t?.kind === 'file' && mdMode !== 'only' ? '' : 'none';
+  codeHost.style.right = mdMode === 'side' ? '50%' : '';
+  mdHost.style.display = mdMode ? '' : 'none';
+  mdHost.style.left = mdMode === 'side' ? '50%' : '0';
+  mdHost.classList.toggle('side', mdMode === 'side');
   diffHost.style.display = t?.kind === 'diff' ? '' : 'none';
   mediaHost.style.display = t?.kind === 'media' ? '' : 'none';
   emptyHost.style.display = t ? 'none' : '';
@@ -265,6 +294,8 @@ export function render() {
   if (!t) renderEmpty();
   renderCrumbs(t);
   if (t?.kind === 'file') requestAnimationFrame(() => editor.layout());
+  if (mdMode && md.path !== t.path) { md.setMode(mdMode); md.update(t.path, docs.get(t.path).model.getValue()); }
+  else if (mdMode) { md.setMode(mdMode); updatePreviewLater(); }
 }
 
 function renderTabs() {
@@ -292,6 +323,7 @@ function renderTabs() {
     strip.append(el);
   }
   tabbar.append(strip, h('div', { class: 'tab-actions' },
+    isMarkdown(activeFile()) ? h('button', { class: 'ibtn' + (activeTab().md ? ' on' : ''), title: activeTab().md ? 'Close Preview (⇧⌘V)' : 'Open Preview to the Side (⇧⌘V)', onclick: () => exec('markdown.preview') }, icon('eye')) : null,
     activeFile() ? h('button', { class: 'ibtn', title: 'Compare with HEAD', onclick: () => exec('git.diffFile', activeFile()) }, icon('split2')) : null,
     h('button', { class: 'ibtn', title: 'Edit with AI (⌘K)', onclick: () => exec('ai.inlineEdit') }, icon('wand')),
     h('button', { class: 'ibtn', title: 'More', onclick: (e) => popupMenu([
@@ -314,6 +346,7 @@ function tabMenu(t, e) {
     t.path ? { label: 'Reveal in Explorer', onClick: () => exec('explorer.reveal', t.path) } : null,
     t.path ? { label: 'Reveal in Finder', onClick: () => window.ks.shell.reveal(t.path) } : null,
     t.path && t.kind === 'file' ? '-' : null,
+    t.kind === 'file' && isMarkdown(t.path) ? { label: t.md ? 'Close Preview' : 'Open Preview', icon: 'eye', onClick: () => { activate(t.id); setPreview(t, t.md ? null : 'side'); } } : null,
     t.path && t.kind === 'file' ? { label: 'Add File to Chat', icon: 'chat', onClick: () => exec('chat.addFile', t.path) } : null,
     t.path && t.kind === 'file' ? { label: 'Mention in Claude Code', icon: 'claude', onClick: () => exec('claude.mention', t.path) } : null,
   ].filter(Boolean), e);
@@ -397,6 +430,8 @@ command('editor.format', 'Format Document', () => editor.getAction('editor.actio
 command('editor.find', 'Find', () => { const t = activeTab(); (t?.kind === 'diff' ? diffEditor.getModifiedEditor() : editor).getAction('actions.find')?.run(); });
 command('editor.replace', 'Replace', () => editor.getAction('editor.action.startFindReplaceAction')?.run());
 command('editor.commandPalette', 'Editor Commands…', () => { editor.focus(); editor.getAction('editor.action.quickCommand')?.run(); });
+command('markdown.preview', 'Markdown: Toggle Preview to the Side', () => { const t = activeTab(); if (t?.kind === 'file' && isMarkdown(t.path)) setPreview(t, t.md ? null : 'side'); });
+command('markdown.previewOnly', 'Markdown: Open Preview', () => { const t = activeTab(); if (t?.kind === 'file' && isMarkdown(t.path)) setPreview(t, 'only'); });
 command('editor.fold', 'Fold All', () => editor.getAction('editor.foldAll')?.run());
 command('editor.unfold', 'Unfold All', () => editor.getAction('editor.unfoldAll')?.run());
 

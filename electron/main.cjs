@@ -207,6 +207,7 @@ function buildMenu() {
       item('Command Palette…', 'Cmd+Shift+P', 'palette'), item('Go to File…', 'Cmd+P', 'quick-open'), { type: 'separator' },
       item('Explorer', 'Cmd+Shift+E', 'explorer'), item('Search', '', 'search'), item('Source Control', 'Ctrl+Shift+G', 'scm'), { type: 'separator' },
       item('Toggle Sidebar', 'Cmd+B', 'toggle-sidebar'), item('Toggle Terminal', 'Ctrl+`', 'toggle-terminal'), item('Toggle Panel', 'Cmd+J', 'toggle-panel'), item('Toggle AI Chat', 'Cmd+Alt+B', 'toggle-chat'),
+      { type: 'separator' }, item('Markdown Preview', 'Shift+Cmd+V', 'md-preview'),
       { type: 'separator' }, item('Zoom In', 'Cmd+=', 'zoom-in'), item('Zoom Out', 'Cmd+-', 'zoom-out'), item('Reset Zoom', 'Cmd+0', 'zoom-reset'),
       { type: 'separator' }, { role: 'togglefullscreen' }, ...(app.isPackaged ? [] : [{ role: 'toggleDevTools' }])] },
     { label: 'Go', submenu: [
@@ -296,7 +297,7 @@ app.whenReady().then(async () => {
   });
   if (!DEV_URL) {
     session.defaultSession.webRequest.onHeadersReceived((d, cb) => cb({ responseHeaders: { ...d.responseHeaders, 'Content-Security-Policy': [
-      "default-src 'self' ks:; script-src 'self' ks:; worker-src 'self' ks: blob:; style-src 'self' ks: 'unsafe-inline'; img-src 'self' ks: data: blob:; font-src 'self' ks: data:; connect-src 'self' ks:; object-src 'none'; base-uri 'none'"] } }));
+      "default-src 'self' ks:; script-src 'self' ks:; worker-src 'self' ks: blob:; style-src 'self' ks: 'unsafe-inline'; img-src 'self' ks: data: blob: https:; font-src 'self' ks: data:; connect-src 'self' ks:; object-src 'none'; base-uri 'none'"] } }));
   }
   session.defaultSession.setPermissionRequestHandler((_wc, perm, cb) => cb(perm === 'clipboard-sanitized-write' || perm === 'clipboard-read'));
   nativeTheme.themeSource = config.settings.theme || 'dark';
