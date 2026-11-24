@@ -163,8 +163,9 @@ function welcome() {
       h('div', { class: 'wl-foot muted sm' }, h('span', {}, 'Drop a folder here to open it'), h('span', {}, `v${S.version}`)))));
 }
 
-async function openFolder() { try { const info = await window.ks.ws.pick(); if (info) enter(info); } catch (e) { toast(e.message, 'error'); } }
+async function openFolder() { try { const p = await window.ks.ws.pick(); if (p) await openPath(p); } catch (e) { toast(e.message, 'error'); } }
 async function openPath(p) {
+  if (await window.ks.ws.focusOpen(p).catch(() => false)) return; // already open in another window: that one comes forward
   if (S.ws && !(await leaveWorkspace())) return;
   try { enter(await window.ks.ws.open(p)); } catch (e) { toast(e.message, 'error'); }
 }
@@ -198,6 +199,7 @@ command('layout.sidebar', 'View: Toggle Sidebar', (v) => { S.layout.sidebar = v 
 command('layout.panel', 'View: Toggle Panel', (v) => { const was = S.layout.panel; S.layout.panel = v ?? !S.layout.panel; applyLayout(); if (S.layout.panel && !was) Term.panelShown(); if (!S.layout.panel) E.getEditor()?.focus(); });
 command('layout.chat', 'View: Toggle AI Pane', (v, pane) => { S.layout.chat = v ?? !S.layout.chat; if (pane) S.layout.pane = pane; applyLayout(); renderStatus(); if (S.layout.chat && S.layout.pane === 'claude') Claude.focus(); });
 command('workspace.open', 'File: Open Folder…', () => openFolder());
+command('window.new', 'File: New Window', () => window.ks.app.newWindow());
 command('workspace.close', 'File: Close Folder', async () => { if (await leaveWorkspace()) { await window.ks.ws.close(); welcome(); } });
 command('workspace.reveal', 'File: Reveal Active File in Finder', () => { const f = E.activeFile(); window.ks.shell.reveal(f || '.'); });
 command('git.refresh', 'Git: Refresh', () => refreshGit());

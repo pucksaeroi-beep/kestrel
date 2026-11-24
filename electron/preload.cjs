@@ -11,12 +11,12 @@ const on = (ch) => (fn) => { const f = (_e, ...a) => fn(...a); ipcRenderer.on(ch
 
 contextBridge.exposeInMainWorld('ks', {
   app: {
-    state: call('app:state'), closeNow: () => ipcRenderer.invoke('app:closeNow'),
+    state: call('app:state'), newWindow: call('app:newWindow'), closeNow: () => ipcRenderer.invoke('app:closeNow'),
     onFocus: on('app:focus'), onBeforeClose: on('app:beforeClose'), onMenu: on('menu'), rebuildMenu: call('menu:rebuild'),
   },
   settings: { set: call('settings:set') },
   session: { save: call('session:save') },
-  ws: { pick: call('ws:pick'), open: call('ws:open'), close: call('ws:close'), forget: call('ws:forget') },
+  ws: { pick: call('ws:pick'), focusOpen: call('ws:focusOpen'), open: call('ws:open'), close: call('ws:close'), forget: call('ws:forget') },
   fs: {
     list: call('fs:list'), read: call('fs:read'), write: call('fs:write'), create: call('fs:create'), rename: call('fs:rename'),
     trash: call('fs:trash'), files: call('fs:files'), search: call('fs:search'), abs: call('fs:abs'), readAbs: call('fs:readAbs'), statAbs: call('fs:statAbs'), import: call('fs:import'),
