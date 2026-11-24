@@ -319,7 +319,7 @@ function renderTabs() {
     h('span', { class: 'fbadge', style: { color: col } }, lbl),
     h('span', { class: 'tab-title' }, t.title),
     t.sub ? h('span', { class: 'tab-sub' }, t.sub) : null,
-    h('button', { class: 'tab-x', title: 'Close (⌘W)', onclick: (e) => { e.stopPropagation(); close(t.id); } }, dirty ? h('span', { class: 'dirty-dot' }) : icon('close')));
+    h('button', { class: 'tab-x', title: 'Close (⌘W)', onclick: (e) => { e.stopPropagation(); close(t.id); } }, dirty ? h('span', { class: 'dirty-dot' }) : null, icon('close')));
     strip.append(el);
   }
   tabbar.append(strip, h('div', { class: 'tab-actions' },
