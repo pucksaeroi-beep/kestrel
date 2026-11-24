@@ -15,13 +15,24 @@ It's as fast as Cursor and as open as VS Code. Bring your own API keys for any m
 ![Providers](https://img.shields.io/badge/AI%20providers-10-ff7a45)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
-[Features](#-features) · [Claude Code](#-claude-code-built-in) · [Models & keys](#-models--api-keys) · [Install](#-install) · [Shortcuts](#%EF%B8%8F-keyboard-shortcuts) · [How it works](#-how-it-works) · [ภาษาไทย](#-ภาษาไทย)
+<a href="https://github.com/pucksaeroi-beep/kestrel/releases/latest/download/Kestrel-mac-arm64.dmg"><img src="https://img.shields.io/badge/Download%20for%20macOS-Apple%20Silicon-000?style=for-the-badge&logo=apple&logoColor=white" alt="Download Kestrel for macOS" height="40" /></a>
+
+<sub>No build needed · free · <a href="#%EF%B8%8F-download">first-launch steps</a> · <a href="https://github.com/pucksaeroi-beep/kestrel/releases">all releases</a></sub>
+
+[Download](#%EF%B8%8F-download) · [Features](#-features) · [Claude Code](#-claude-code-built-in) · [Models & keys](#-models--api-keys) · [Install](#-install) · [Shortcuts](#%EF%B8%8F-keyboard-shortcuts) · [How it works](#-how-it-works) · [ภาษาไทย](#-ภาษาไทย)
 
 <img src="docs/screenshots/hero.png" alt="Kestrel — file tree, editor and AI chat with a code suggestion" width="100%" />
 
 </div>
 
 ---
+
+## ⬇️ Download
+
+1. **[Download Kestrel-mac-arm64.dmg](https://github.com/pucksaeroi-beep/kestrel/releases/latest/download/Kestrel-mac-arm64.dmg)** for Macs with Apple Silicon (M1 or newer). On an Intel Mac, [build it from source](#-install).
+2. Open the DMG and drag **Kestrel** into **Applications**.
+3. The first time you open it, macOS blocks it because the app is not notarized by Apple. Go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. You only do this once.
+   Or run this in Terminal: `xattr -dr com.apple.quarantine /Applications/Kestrel.app`
 
 ## Why Kestrel?
 
@@ -205,6 +216,8 @@ Kestrel is an independent project. It is not affiliated with Anthropic, Cursor o
 ---
 
 ## 🇹🇭 ภาษาไทย
+
+**ดาวน์โหลดไปใช้ได้เลย ไม่ต้อง build เอง:** [Kestrel-mac-arm64.dmg](https://github.com/pucksaeroi-beep/kestrel/releases/latest/download/Kestrel-mac-arm64.dmg) (สำหรับ Mac ชิป M1 ขึ้นไป) เปิดไฟล์แล้วลาก Kestrel ไปไว้ใน Applications ตอนเปิดครั้งแรก macOS จะไม่ยอมให้เปิด ให้ไปที่ **System Settings → Privacy & Security** แล้วกด **Open Anyway** (ทำแค่ครั้งเดียว)
 
 **Kestrel** คือโปรแกรมเขียนโค้ดพร้อม AI สำหรับ macOS ที่เร็วแบบ Cursor และเปิดกว้างแบบ VS Code ใช้ API key ของคุณเองได้ทุกค่าย และมี **Claude Code ตัวจริง** ติดมาให้ในตัว
 

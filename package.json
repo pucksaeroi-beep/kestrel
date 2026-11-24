@@ -16,6 +16,7 @@
     "demo": "node scripts/demo-workspace.mjs",
     "dist": "vite build && electron-builder --mac --publish never",
     "install-app": "npm run dist && node scripts/install-app.mjs",
+    "release": "npm run dist && node scripts/release.mjs",
     "mock-ai": "node scripts/mock-ai.mjs"
   },
   "build": {
